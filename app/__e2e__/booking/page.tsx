@@ -31,6 +31,8 @@ function buildMockPaquete(hasDates: boolean): Paquete {
     imagenPrincipal: '',
     visible: true,
     destacado: false,
+    fechaCreacion: new Date(),
+    orden: 1,
     ctaWhatsApp: false,
     bookingConfig: {
       enabled: true,
@@ -88,4 +90,3 @@ export default async function BookingE2EPage({ searchParams }: { searchParams: S
     </div>
   );
 }
-
