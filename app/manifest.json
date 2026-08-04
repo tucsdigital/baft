@@ -1,6 +1,6 @@
 {
-  "name": "BAFT",
-  "short_name": "BAFT",
+  "name": "Baft Travel",
+  "short_name": "Baft Travel",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -15,7 +15,7 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#1F341C",
-  "background_color": "#020202",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
   "display": "standalone"
 }
