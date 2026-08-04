@@ -7,12 +7,12 @@
     "secondary": "#020202"
   },
   "logo": {
-    "url": "/images/logo.png"
+    "url": "/images/logo_white.png"
   },
   "seo": {
     "title": "BAFT",
     "description": "BAFT es más que una agencia de turismo: funciona también como un centro de informes para cada visitante y un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
-    "image": "/images/logo.png"
+    "image": "/images/logo_white.png"
   },
   "hero": {
     "title": "BAFT",

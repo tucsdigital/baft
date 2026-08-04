@@ -1,7 +1,9 @@
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
-let _adminAuth: Auth | null = null;
+export let adminAuth: Auth | null = null;
+export let adminDb: Firestore | null = null;
 
 function normalizeEnvString(value: unknown): string {
   const s = String(value ?? '').trim();
@@ -66,14 +68,16 @@ function parseServiceAccountJson(raw: string): any | null {
 }
 
 function init() {
-  if (_adminAuth) return;
+  if (adminAuth) return;
   if (getApps().length > 0) {
-    _adminAuth = getAuth();
+    adminAuth = getAuth();
+    adminDb = getFirestore();
     return;
   }
   const fromParts = initFromEnvParts();
   if (fromParts) {
-    _adminAuth = fromParts;
+    adminAuth = fromParts;
+    adminDb = getFirestore();
     return;
   }
 
@@ -84,18 +88,19 @@ function init() {
       initializeApp({
         credential: cert(parsed),
       });
-      _adminAuth = getAuth();
+      adminAuth = getAuth();
+      adminDb = getFirestore();
       return;
     }
     console.warn('[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT presente pero no válido. Admin deshabilitado.');
-    _adminAuth = null;
+    adminAuth = null;
+    adminDb = null;
     return;
   }
   // Sin credenciales explícitas, no inicializamos para evitar errores en local
   console.warn('[firebaseAdmin] No se encontraron credenciales. Firebase Admin deshabilitado.');
-  _adminAuth = null;
+  adminAuth = null;
+  adminDb = null;
 }
 
 init();
-
-export const adminAuth = _adminAuth;

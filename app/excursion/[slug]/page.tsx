@@ -28,18 +28,8 @@ import { buildPageTitle } from '@/lib/siteConfig';
 /** Sin caché: los cambios del admin se ven de inmesdiato */
 export const revalidate = 0;
 
-const DEFAULT_CONDICIONES = [
-  { titulo: 'Reserva', texto: 'Seña del 40% para asegurar tu lugar.' },
-  { titulo: 'Pagos', texto: 'Consultá nuestras cuotas y medios de pago disponibles.' },
-  { titulo: 'Confirmación', texto: 'Salida sujeta a la conformación del grupo mínimo.' },
-  { titulo: 'Flexibilidad', texto: 'Excursiones condicionadas por clima o imprevistos.' },
-  { titulo: 'Seguridad', texto: 'Recomendamos contratar asistencia al viajero.' },
-  { titulo: 'Gastos extra', texto: 'No incluye comidas en ruta, bebidas ni opcionales.' },
-  { titulo: 'Ingresos', texto: 'No incluye tickets a parques nacionales ni museos.' },
-];
-
 function normalizeCondiciones(raw: unknown) {
-  if (!Array.isArray(raw)) return DEFAULT_CONDICIONES;
+  if (!Array.isArray(raw)) return [];
   const parsed = raw
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
@@ -49,7 +39,7 @@ function normalizeCondiciones(raw: unknown) {
       return { titulo, texto };
     })
     .filter((item): item is { titulo: string; texto: string } => Boolean(item));
-  return parsed.length > 0 ? parsed : DEFAULT_CONDICIONES;
+  return parsed;
 }
 
 async function getPaquete(slug: string): Promise<Paquete | null> {

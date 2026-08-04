@@ -73,12 +73,13 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   const specialPrice = Number(paquete.precioDescuentoPrimerosCupos ?? 0);
   const specialDeadline = formatPromoDeadline(paquete.tarifaEspecialFechaLimite);
   const specialDeadlineDate = parsePromoDeadline(paquete.tarifaEspecialFechaLimite);
+  const [renderedAt] = useState(() => Date.now());
   const hasSpecialPrice =
     specialPrice > 0 &&
     paquete.precio > 0 &&
     specialPrice < paquete.precio &&
     Boolean(specialDeadline) &&
-    Boolean(specialDeadlineDate && specialDeadlineDate.getTime() >= Date.now());
+    Boolean(specialDeadlineDate && specialDeadlineDate.getTime() >= renderedAt);
   const [step, setStep] = useState<'people' | 'calendar'>('people');
   const [selectedDate, setSelectedDate] = useState('');
   const [pax, setPax] = useState<PeopleBreakdown>(() =>
@@ -87,6 +88,18 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   const people = Math.max(1, Math.floor(getPeopleBreakdownTotal(pax)));
   const whatsappHref = useMemo(() => getWhatsAppLinkForPackage(paquete.titulo), [paquete.titulo]);
   const paymentMethods = ['VISA', 'mastercard', 'NARANJA', 'mercado pago'];
+  const condiciones = useMemo(
+    () =>
+      Array.isArray(paquete.condiciones)
+        ? paquete.condiciones
+            .map((item) => ({
+              titulo: String(item?.titulo ?? '').trim(),
+              texto: String(item?.texto ?? '').trim(),
+            }))
+            .filter((item) => item.titulo.length > 0 && item.texto.length > 0)
+        : [],
+    [paquete.condiciones]
+  );
 
   const visibleBookingDates = useMemo(
     () => filterAvailabilityToBookingWindow(bookingDates, new Date()).sort((a, b) => a.date.localeCompare(b.date)),
@@ -449,20 +462,19 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
             Consultar por WhatsApp
           </a>
 
-          <div className="space-y-2 rounded-2xl border border-[#D6E8F7] bg-white p-4 text-sm text-slate-700">
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#16A34A]" />
-              <span>{visibleBookingDates.length > 0 ? 'Elegís fecha con disponibilidad real antes de avanzar' : 'Reservás sin fecha y coordinamos la salida'}</span>
+          {condiciones.length > 0 ? (
+            <div className="space-y-3 rounded-2xl border border-[#D6E8F7] bg-white p-4 text-sm text-slate-700">
+              {condiciones.map((item, index) => (
+                <div key={`${item.titulo}-${index}`} className="flex items-start gap-2.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#16A34A]" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[#0D223F]">{item.titulo}</div>
+                    <div className="mt-0.5 text-slate-600">{item.texto}</div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#16A34A]" />
-              <span>Validás la cantidad de personas según cupo y máximo permitido</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#16A34A]" />
-              <span>Completás el pago directo en checkout</span>
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
 

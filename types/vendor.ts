@@ -5,6 +5,8 @@ export type Vendor = {
   id: string;
   name: string;
   email: string;
+  dni?: string | null;
+  normalizedDni?: string | null;
   active: boolean;
   authUid?: string | null;
   mustChangePassword?: boolean | null;

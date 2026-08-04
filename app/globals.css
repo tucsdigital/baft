@@ -175,6 +175,26 @@ body {
   overflow-x: hidden;
 }
 
+body[data-admin-ui='true'] [data-slot='dialog-overlay'],
+body[data-admin-ui='true'] [data-slot='alert-dialog-overlay'] {
+  z-index: 1200 !important;
+}
+
+body[data-admin-ui='true'] [data-slot='dialog-content'],
+body[data-admin-ui='true'] [data-slot='alert-dialog-content'] {
+  z-index: 1210 !important;
+}
+
+body[data-admin-ui='true'] [data-slot='dropdown-menu-content'],
+body[data-admin-ui='true'] [data-slot='select-content'],
+body[data-admin-ui='true'] [data-slot='dropdown-menu-sub-content'] {
+  z-index: 1220 !important;
+}
+
+body[data-admin-ui='true'] [data-radix-popper-content-wrapper] {
+  z-index: 1220 !important;
+}
+
 /* Utilidades de tipografía personalizadas */
 @layer utilities {
   .font-heading {

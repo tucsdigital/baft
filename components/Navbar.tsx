@@ -138,23 +138,18 @@ export default function Navbar({
   const destinosItems = useMemo(() => destinos.filter((d) => Boolean(d?.slug)).slice(0, 6), [destinos]);
 
   const isTransparent = forceTransparent || ((transparent || floating) && !isScrolled);
+  const isLightChrome = !isTransparent;
   const logoSrc = '/images/logo_white.png';
-  const logoToneClass = isTransparent ? '' : 'invert';
-  const shellClasses = isTransparent
-    ? 'text-white'
-    : isScrolled
-      ? 'text-[#1F2937]'
-      : 'text-white';
+  const logoToneClass = isLightChrome ? 'invert' : '';
+  const shellClasses = isLightChrome ? 'text-[#1F2937]' : 'text-white';
 
-  const chromeClasses = isTransparent
-    ? 'bg-[linear-gradient(180deg,rgba(18,27,21,0.76)_0%,rgba(18,27,21,0.56)_100%)] backdrop-blur-[18px] backdrop-saturate-[150%] shadow-[0_10px_28px_rgba(0,0,0,0.08)]'
-    : isScrolled
-      ? 'bg-white/94 backdrop-blur-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.08)]'
-      : 'bg-[linear-gradient(180deg,rgba(18,27,21,0.76)_0%,rgba(18,27,21,0.56)_100%)] backdrop-blur-[18px] backdrop-saturate-[150%] shadow-[0_10px_28px_rgba(0,0,0,0.08)]';
+  const chromeClasses = isLightChrome
+    ? 'bg-white/94 backdrop-blur-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.08)]'
+    : 'bg-[linear-gradient(180deg,rgba(18,27,21,0.76)_0%,rgba(18,27,21,0.56)_100%)] backdrop-blur-[18px] backdrop-saturate-[150%] shadow-[0_10px_28px_rgba(0,0,0,0.08)]';
 
   const linkBase = 'inline-flex items-center leading-none uppercase tracking-[0.14em] transition-colors text-[11px] xl:text-xs font-semibold';
-  const linkIdle = isScrolled ? 'text-[#1F2937]/82 hover:text-[#5CB85C]' : 'text-white/82 hover:text-[#8FCB81]';
-  const activeLine = isScrolled ? 'after:bg-[#5CB85C]' : 'after:bg-[#5CB85C]';
+  const linkIdle = isLightChrome ? 'text-[#1F2937]/82 hover:text-[#5CB85C]' : 'text-white/82 hover:text-[#8FCB81]';
+  const activeLine = 'after:bg-[#5CB85C]';
 
   const navContent = (
     <nav
@@ -234,9 +229,9 @@ export default function Navbar({
           aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
         >
           {mobileMenuOpen ? (
-            <X className={`h-6 w-6 ${isScrolled ? 'text-[#0B2240]' : 'text-white'}`} />
+            <X className={`h-6 w-6 ${isLightChrome ? 'text-[#0B2240]' : 'text-white'}`} />
           ) : (
-            <Menu className={`h-6 w-6 ${isScrolled ? 'text-[#0B2240]' : 'text-white'}`} />
+            <Menu className={`h-6 w-6 ${isLightChrome ? 'text-[#0B2240]' : 'text-white'}`} />
           )}
         </button>
       </div>
@@ -254,7 +249,7 @@ export default function Navbar({
             <div className="container mx-auto px-4 pb-5 md:px-6 lg:px-8">
               <div
                 className={`rounded-[24px] border backdrop-blur-[18px] ${
-                  isScrolled
+                  isLightChrome
                     ? 'border-[#E8ECE8] bg-white/96 shadow-[0_12px_36px_rgba(0,0,0,0.08)]'
                     : 'border-white/8 bg-[linear-gradient(180deg,rgba(17,32,25,0.78)_0%,rgba(17,32,25,0.58)_100%)] shadow-[0_14px_36px_rgba(0,0,0,0.12)]'
                 }`}
@@ -262,19 +257,19 @@ export default function Navbar({
                 <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
                   <div
                     className={`rounded-[20px] border p-5 ${
-                      isScrolled ? 'border-[#E7EEF5] bg-[#F6FBFF]/90' : 'border-white/10 bg-white/6'
+                      isLightChrome ? 'border-[#E7EEF5] bg-[#F6FBFF]/90' : 'border-white/10 bg-white/6'
                     }`}
                   >
-                    <div className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isScrolled ? 'text-[#5A7898]' : 'text-white/58'}`}>
+                    <div className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightChrome ? 'text-[#5A7898]' : 'text-white/58'}`}>
                       Explorá la Patagonia
                     </div>
-                    <div className={`mt-2 text-xs ${isScrolled ? 'text-[#0B2240]/80' : 'text-white/78'}`}>
+                    <div className={`mt-2 text-xs ${isLightChrome ? 'text-[#0B2240]/80' : 'text-white/78'}`}>
                       Descubrí los mejores destinos y experiencias, con la curación BAFT.
                     </div>
                     <Link
                       href="/excursiones"
                       className={`mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${
-                        isScrolled
+                        isLightChrome
                           ? 'border border-[#D8E7F5] bg-white text-[#112B49] hover:bg-[#F8FCFF]'
                           : 'border border-white/10 bg-white/8 text-white hover:bg-white/12'
                       }`}
@@ -291,14 +286,14 @@ export default function Navbar({
                         key={item.id}
                         href={`/destinos/${item.slug}`}
                         className={`group rounded-[20px] border p-3 transition duration-200 ${
-                          isScrolled
+                          isLightChrome
                             ? 'border-[#E7EEF5] bg-white/92 hover:border-[#D6E5D6] hover:bg-white'
                             : 'border-white/10 bg-white/6 hover:border-white/14 hover:bg-white/8'
                         }`}
                         onClick={() => setDestinosOpen(false)}
                       >
                         <div className="flex gap-3">
-                          <div className={`relative h-14 w-14 overflow-hidden rounded-2xl ${isScrolled ? 'bg-[#EEF6FF]' : 'bg-white/10'}`}>
+                          <div className={`relative h-14 w-14 overflow-hidden rounded-2xl ${isLightChrome ? 'bg-[#EEF6FF]' : 'bg-white/10'}`}>
                             <Image
                               src={item.imagen || '/images/hero-placeholder.svg'}
                               alt={item.nombre}
@@ -308,13 +303,13 @@ export default function Navbar({
                             />
                           </div>
                           <div className="min-w-0">
-                            <div className={`truncate text-[13px] font-extrabold tracking-[-0.01em] ${isScrolled ? 'text-[#0B2240]' : 'text-white'}`}>
+                            <div className={`truncate text-[13px] font-extrabold tracking-[-0.01em] ${isLightChrome ? 'text-[#0B2240]' : 'text-white'}`}>
                               {item.nombre}
                             </div>
-                            <div className={`mt-1 line-clamp-2 text-xs leading-snug ${isScrolled ? 'text-[#5A7898]' : 'text-white/68'}`}>
+                            <div className={`mt-1 line-clamp-2 text-xs leading-snug ${isLightChrome ? 'text-[#5A7898]' : 'text-white/68'}`}>
                               {getDestinoSubtitle(item)}
                             </div>
-                            <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${isScrolled ? 'text-[#0B7FA5]' : 'text-[#8FCB81]'}`}>
+                            <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${isLightChrome ? 'text-[#0B7FA5]' : 'text-[#8FCB81]'}`}>
                               Ver destino <ChevronRight className="h-4 w-4" />
                             </div>
                           </div>

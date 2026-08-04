@@ -32,7 +32,7 @@ export default function BlogCard({ post, index = 0 }: BlogCardProps) {
       }).format(date as Date)
     : 'Reciente';
 
-  const cardImage = post.imagenTarjeta || post.imagenPrincipal || '/logo.png';
+  const cardImage = post.imagenTarjeta || post.imagenPrincipal || '/logo_white.png';
 
   return (
     <motion.article

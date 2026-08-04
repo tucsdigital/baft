@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -21,7 +21,8 @@ import {
   Mail,
   Loader2,
   ChevronRight,
-  Users
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -34,6 +35,7 @@ const navigation = [
   { name: 'Excursiones', href: '/admin/paquetes', icon: Package },
   { name: 'Ventas', href: '/admin/ventas', icon: Handshake },
   { name: 'Vendedores', href: '/admin/vendedores', icon: Users },
+  { name: 'Configuración', href: '/admin/seguridad', icon: ShieldCheck },
   { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { name: 'Consultas', href: '/admin/consultas', icon: MessageSquare },
   { name: 'Newsletter', href: '/admin/newsletter', icon: Mail },
@@ -76,8 +78,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return found?.name ?? 'Admin';
   }, [pathname]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.setAttribute('data-admin-ui', 'true');
+    return () => {
+      document.body.removeAttribute('data-admin-ui');
+    };
+  }, []);
+
   return (
-    <div className={cn('min-h-screen bg-gray-50')}>
+    <div className={cn('admin-scope min-h-screen bg-gray-50')}>
       {/* Sidebar móvil */}
       {sidebarOpen && (
         <div

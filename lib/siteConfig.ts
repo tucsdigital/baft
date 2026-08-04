@@ -266,7 +266,7 @@ function mapSimpleSiteConfig(input: Record<string, any>): Partial<SiteConfig> {
       siteDescription,
       siteUrlDefault: 'https://example.com',
       logo: {
-        imagePath: logoValue.startsWith('/') ? logoValue : '/images/logo.png',
+        imagePath: logoValue.startsWith('/') ? logoValue : '/images/logo_white.png',
         imageUrl: logoValue.startsWith('http') ? logoValue : '',
         titleText: siteName,
         altTextTemplate: '{{siteName}}',
@@ -315,7 +315,7 @@ function mapSimpleSiteConfig(input: Record<string, any>): Partial<SiteConfig> {
       locale: 'es_AR',
       titleDefaultTemplate: ensureString(input.seo?.title, siteName),
       titleTemplate: `%s | ${siteName}`,
-      openGraphImagePath: ensurePathOrUrl(input.seo?.image, logoValue || '/images/logo.png'),
+      openGraphImagePath: ensurePathOrUrl(input.seo?.image, logoValue || '/images/logo_white.png'),
       keywords: [
         siteName.toLowerCase(),
         'patagonia',
@@ -411,7 +411,7 @@ const DEFAULT_SITE_CONFIG: SiteConfig = {
     siteDescription: 'Descripción del sitio',
     siteUrlDefault: 'https://example.com',
     logo: {
-      imagePath: '/logo.png',
+      imagePath: '/logo_white.png',
       imageUrl: '',
       titleText: 'Sitio',
       altTextTemplate: '{{siteName}} Logo',

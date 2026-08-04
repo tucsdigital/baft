@@ -21,7 +21,7 @@ export default function PaqueteSchema({ paquete, basePath = '/excursion' }: Paqu
     '@type': 'Product',
     name: paquete.titulo,
     description: cleanDescription,
-    image: paquete.imagenPortada || paquete.imagenTarjeta || paquete.imagenPrincipal || `${siteUrl}/logo.png`,
+    image: paquete.imagenPortada || paquete.imagenTarjeta || paquete.imagenPrincipal || `${siteUrl}/logo_white.png`,
     brand: {
       '@type': 'Brand',
       name: SITE_NAME,

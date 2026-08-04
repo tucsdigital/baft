@@ -38,6 +38,7 @@ import { toast } from 'sonner';
 import { getAuthInstance } from '@/lib/firebase';
 
 export default function VendedoresPage() {
+  const normalizeDni = (value: string) => value.replace(/\D+/g, '').trim();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -47,9 +48,10 @@ export default function VendedoresPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
-  const [form, setForm] = useState<{ name: string; email: string; active: 'true' | 'false'; type: 'percent' | 'fixed'; value: number; currency: 'ars' | 'brl' | 'usd' }>({
+  const [form, setForm] = useState<{ name: string; email: string; dni: string; active: 'true' | 'false'; type: 'percent' | 'fixed'; value: number; currency: 'ars' | 'brl' | 'usd' }>({
     name: '',
     email: '',
+    dni: '',
     active: 'true',
     type: 'percent',
     value: 10,
@@ -80,7 +82,11 @@ export default function VendedoresPage() {
   const filtered = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
     if (!t) return vendors;
-    return vendors.filter(v => v.name.toLowerCase().includes(t) || v.email.toLowerCase().includes(t));
+    return vendors.filter(v =>
+      v.name.toLowerCase().includes(t) ||
+      v.email.toLowerCase().includes(t) ||
+      String(v.dni ?? '').includes(t)
+    );
   }, [vendors, searchTerm]);
 
   const pageItems = useMemo(() => {
@@ -90,7 +96,7 @@ export default function VendedoresPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', email: '', active: 'true', type: 'percent', value: 10, currency: 'ars' });
+    setForm({ name: '', email: '', dni: '', active: 'true', type: 'percent', value: 10, currency: 'ars' });
     setFormOpen(true);
   };
 
@@ -99,6 +105,7 @@ export default function VendedoresPage() {
     setForm({
       name: v.name,
       email: v.email,
+      dni: v.dni ?? '',
       active: v.active ? 'true' : 'false',
       type: v.defaultCommission.type,
       value: v.defaultCommission.value,
@@ -113,6 +120,8 @@ export default function VendedoresPage() {
       const payload = {
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
+        dni: normalizeDni(form.dni),
+        normalizedDni: normalizeDni(form.dni),
         active: form.active === 'true',
         defaultCommission: {
           type: form.type,
@@ -120,8 +129,8 @@ export default function VendedoresPage() {
           currency: form.currency,
         },
       };
-      if (!payload.name || !payload.email || Number.isNaN(payload.defaultCommission.value)) {
-        toast.error('Datos inválidos');
+      if (!payload.name || !payload.email || !payload.normalizedDni || Number.isNaN(payload.defaultCommission.value)) {
+        toast.error('Completá nombre, email, DNI y comisión.');
         setSaving(false);
         return;
         }
@@ -259,7 +268,7 @@ export default function VendedoresPage() {
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-gray-500" />
                 <Input
-                  placeholder="Buscar por nombre o email"
+                  placeholder="Buscar por nombre, email o DNI"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -304,6 +313,7 @@ export default function VendedoresPage() {
                         <TableRow className="border-black/5 hover:bg-transparent">
                           <TableHead className="px-4">Nombre</TableHead>
                           <TableHead>Email</TableHead>
+                          <TableHead>DNI</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead>Comisión</TableHead>
                           <TableHead className="text-right pr-4">Acciones</TableHead>
@@ -321,6 +331,11 @@ export default function VendedoresPage() {
                             <TableCell>
                               <div className="text-sm text-gray-900 break-all">
                                 {v.email}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm text-gray-900">
+                                {v.dni || 'Sin cargar'}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -437,7 +452,7 @@ export default function VendedoresPage() {
                 <DialogDescription>Definí datos básicos y la comisión por defecto.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Nombre</Label>
                     <Input placeholder="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -445,6 +460,15 @@ export default function VendedoresPage() {
                   <div className="space-y-2">
                     <Label>Email</Label>
                     <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>DNI</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="30111222"
+                      value={form.dni}
+                      onChange={(e) => setForm({ ...form, dni: normalizeDni(e.target.value) })}
+                    />
                   </div>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border px-3 py-2">

@@ -67,6 +67,9 @@ async function cloneAssetMap(paquete: Paquete): Promise<Map<string, UploadResult
     paquete.imagenPortada,
     paquete.imagenPortadaMobile,
     paquete.imagenPortadaDesktop,
+    paquete.imagenCard,
+    ...(paquete.imagenes || []),
+    ...((paquete.tickets || []).map((ticket) => ticket.imagenUrl).filter(Boolean) as string[]),
     ...(paquete.galeria || []),
   ].filter((value): value is string => Boolean(value));
 
@@ -75,9 +78,12 @@ async function cloneAssetMap(paquete: Paquete): Promise<Map<string, UploadResult
 
   for (let index = 0; index < uniqueUrls.length; index += 1) {
     const url = uniqueUrls[index];
-    const file = await cloneRemoteFile(url, `paquete-duplicado-${Date.now()}-${index}`);
-    const uploaded = await uploadImage(file);
-    uploads.set(url, uploaded);
+    try {
+      const file = await cloneRemoteFile(url, `paquete-duplicado-${Date.now()}-${index}`);
+      const uploaded = await uploadImage(file);
+      uploads.set(url, uploaded);
+    } catch {
+    }
   }
 
   return uploads;
@@ -120,6 +126,9 @@ export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqu
   const uniqueSlug = getUniqueSlug(uniqueTitle, paquetesExistentes.map((item) => item.slug));
   const maxOrder = paquetesExistentes.reduce((max, item) => Math.max(max, item.orden || 0), 0);
   const clonedAssets = await cloneAssetMap(original);
+  const baseTipos = Array.from(
+    new Set([...(original.tipos || []), ...(original.tipo ? [original.tipo] : [])].filter(Boolean))
+  );
 
   const duplicatedData: Omit<Paquete, 'id'> = {
     ...original,
@@ -127,33 +136,59 @@ export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqu
     slug: uniqueSlug,
     orden: maxOrder + 1,
     fechaCreacion: Timestamp.now(),
+    tipo: baseTipos[0] || original.tipo,
     incluye: [...(original.incluye || [])],
     noIncluye: [...(original.noIncluye || [])],
     categoriaIds: [...(original.categoriaIds || [])],
-    tipos: [...(original.tipos || (original.tipo ? [original.tipo] : []))],
+    tipos: [...baseTipos],
     tiposTransporte: [...(original.tiposTransporte || [])],
+    tags: [...(original.tags || [])],
+    faqs: Array.isArray(original.faqs) ? original.faqs.map((item) => ({ ...item })) : original.faqs,
+    testimonios: Array.isArray(original.testimonios) ? original.testimonios.map((item) => ({ ...item })) : original.testimonios,
+    itinerarioSteps: Array.isArray(original.itinerarioSteps) ? original.itinerarioSteps.map((item) => ({ ...item })) : original.itinerarioSteps,
+    bookingConfig: original.bookingConfig ? (JSON.parse(JSON.stringify(original.bookingConfig)) as Paquete['bookingConfig']) : original.bookingConfig,
+    reservationPricing: original.reservationPricing
+      ? (JSON.parse(JSON.stringify(original.reservationPricing)) as Paquete['reservationPricing'])
+      : original.reservationPricing,
+    pickupPoints: [...(original.pickupPoints || [])],
+    pickupPointsConfig: Array.isArray(original.pickupPointsConfig)
+      ? original.pickupPointsConfig.map((item) => ({ ...item }))
+      : original.pickupPointsConfig,
     galeria: (original.galeria || []).map((url) => clonedAssets.get(url)?.url || url),
-    galeriaKeys: (original.galeria || []).map((url) => clonedAssets.get(url)?.key || ''),
+    galeriaKeys: (original.galeria || []).map(
+      (url, idx) => clonedAssets.get(url)?.key || original.galeriaKeys?.[idx] || ''
+    ),
     salidas: cloneSalidas(original.salidas || []),
-    tickets: cloneTickets(original.tickets || []),
+    tickets: cloneTickets(original.tickets || []).map((ticket) => ({
+      ...ticket,
+      imagenUrl: ticket.imagenUrl ? clonedAssets.get(ticket.imagenUrl)?.url || ticket.imagenUrl : ticket.imagenUrl,
+    })),
     condiciones: cloneCondiciones(original.condiciones || []),
+    imagenCard: original.imagenCard ? clonedAssets.get(original.imagenCard)?.url || original.imagenCard : original.imagenCard,
+    imagenes: (original.imagenes || []).map((url) => clonedAssets.get(url)?.url || url),
     imagenPrincipal: original.imagenPrincipal ? clonedAssets.get(original.imagenPrincipal)?.url || original.imagenPrincipal : '',
-    imagenPrincipalKey: original.imagenPrincipal ? clonedAssets.get(original.imagenPrincipal)?.key || '' : '',
+    imagenPrincipalKey: original.imagenPrincipal
+      ? clonedAssets.get(original.imagenPrincipal)?.key || original.imagenPrincipalKey || ''
+      : '',
     imagenTarjeta: original.imagenTarjeta ? clonedAssets.get(original.imagenTarjeta)?.url || original.imagenTarjeta : '',
-    imagenTarjetaKey: original.imagenTarjeta ? clonedAssets.get(original.imagenTarjeta)?.key || '' : '',
+    imagenTarjetaKey: original.imagenTarjeta
+      ? clonedAssets.get(original.imagenTarjeta)?.key || original.imagenTarjetaKey || ''
+      : '',
     imagenPortada: original.imagenPortada ? clonedAssets.get(original.imagenPortada)?.url || original.imagenPortada : '',
-    imagenPortadaKey: original.imagenPortada ? clonedAssets.get(original.imagenPortada)?.key || '' : '',
+    imagenPortadaKey: original.imagenPortada
+      ? clonedAssets.get(original.imagenPortada)?.key || original.imagenPortadaKey || ''
+      : '',
     imagenPortadaMobile: original.imagenPortadaMobile
       ? clonedAssets.get(original.imagenPortadaMobile)?.url || original.imagenPortadaMobile
       : '',
     imagenPortadaMobileKey: original.imagenPortadaMobile
-      ? clonedAssets.get(original.imagenPortadaMobile)?.key || ''
+      ? clonedAssets.get(original.imagenPortadaMobile)?.key || original.imagenPortadaMobileKey || ''
       : '',
     imagenPortadaDesktop: original.imagenPortadaDesktop
       ? clonedAssets.get(original.imagenPortadaDesktop)?.url || original.imagenPortadaDesktop
       : '',
     imagenPortadaDesktopKey: original.imagenPortadaDesktop
-      ? clonedAssets.get(original.imagenPortadaDesktop)?.key || ''
+      ? clonedAssets.get(original.imagenPortadaDesktop)?.key || original.imagenPortadaDesktopKey || ''
       : '',
   };
 

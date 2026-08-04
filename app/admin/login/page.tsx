@@ -1,79 +1,95 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  AlertTriangle,
+  Check,
+  Eye,
+  EyeOff,
+  IdCard,
+  KeyRound,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { getAuthInstance } from '@/lib/firebase';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent } from '@/components/ui/card';
-import { toast } from 'sonner';
-import { Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react';
+import AuthPortalShell from '@/components/auth/AuthPortalShell';
 import { SessionManager } from '@/lib/auth/sessionManager';
 import { configureAuthPersistence, validateAdminDomain } from '@/lib/auth/authConfig';
-import { useAuth } from '@/hooks/useAuth';
 import { ADMIN_EMAIL } from '@/lib/constants';
-import { getBrandLogoSrc, isRemoteUrl, renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { normalizeDni, validatePasswordStrength } from '@/lib/auth/password-recovery';
+
+type ViewState = 'login' | 'recover-dni' | 'recover-reset' | 'recover-success';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [capsLock, setCapsLock] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
-  const [lastAttemptTime, setLastAttemptTime] = useState(0);
   const router = useRouter();
   const { user } = useAuth();
   const [sessionManager] = useState(() => SessionManager.getInstance());
-  const logoSrc = getBrandLogoSrc();
-  const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || '{{siteName}} Logo');
 
-  // Verificar si el usuario ya está autenticado
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [capsLock, setCapsLock] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [domainAllowed, setDomainAllowed] = useState(true);
+
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
+  const [lastAttemptTime, setLastAttemptTime] = useState(0);
+
+  const [view, setView] = useState<ViewState>('login');
+  const [dni, setDni] = useState('');
+  const [challengeToken, setChallengeToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+
   useEffect(() => {
     if (user && user.email?.toLowerCase() === ADMIN_EMAIL) {
       router.replace('/admin');
     }
-  }, [user, router]);
+  }, [router, user]);
 
-  // Verificar dominio permitido
   useEffect(() => {
-    if (!validateAdminDomain()) {
+    const allowed = validateAdminDomain();
+    setDomainAllowed(allowed);
+    if (!allowed) {
       toast.error('Acceso no autorizado', {
-        description: 'Este dominio no está autorizado para el panel admin',
+        description: 'Este dominio no está autorizado para el panel admin.',
       });
     }
   }, []);
 
-  // Verificar bloqueo y actualizar timer
   useEffect(() => {
     const checkBlockStatus = () => {
-      if (email) {
-        const blocked = sessionManager.isUserBlocked(email);
-        setIsBlocked(blocked);
-        
-        if (blocked) {
-          const timeRemaining = sessionManager.getBlockTimeRemaining(email);
-          setBlockTimeRemaining(timeRemaining);
-        }
+      if (!email) return;
+      const blocked = sessionManager.isUserBlocked(email);
+      setIsBlocked(blocked);
+      if (blocked) {
+        setBlockTimeRemaining(sessionManager.getBlockTimeRemaining(email));
       }
     };
 
     checkBlockStatus();
-    
-    // Actualizar cada segundo si está bloqueado
-    let interval: NodeJS.Timeout;
+
+    let interval: NodeJS.Timeout | undefined;
     if (isBlocked && blockTimeRemaining > 0) {
       interval = setInterval(() => {
-        const timeRemaining = sessionManager.getBlockTimeRemaining(email);
-        setBlockTimeRemaining(timeRemaining);
-        
-        if (timeRemaining <= 0) {
+        const remaining = sessionManager.getBlockTimeRemaining(email);
+        setBlockTimeRemaining(remaining);
+        if (remaining <= 0) {
           setIsBlocked(false);
           setBlockTimeRemaining(0);
         }
@@ -83,13 +99,24 @@ export default function LoginPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [email, isBlocked, blockTimeRemaining, sessionManager]);
+  }, [blockTimeRemaining, email, isBlocked, sessionManager]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validaciones de seguridad
-    if (!validateAdminDomain()) {
+  const canInteract = domainAllowed && !isBlocked && !loading;
+  const passwordHint = useMemo(() => validatePasswordStrength(newPassword), [newPassword]);
+
+  const resetRecoveryState = () => {
+    setDni('');
+    setChallengeToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setRecoveryLoading(false);
+    setView('login');
+  };
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!domainAllowed) {
       toast.error('Dominio no autorizado');
       return;
     }
@@ -97,17 +124,15 @@ export default function LoginPage() {
     if (isBlocked) {
       const minutes = Math.ceil(blockTimeRemaining / 60000);
       toast.error('Cuenta temporalmente bloqueada', {
-        description: `Intenta nuevamente en ${minutes} minuto(s)`,
+        description: `Intentá de nuevo en ${minutes} minuto(s).`,
       });
       return;
     }
 
-    // Verificar tiempo mínimo entre intentos
     const now = Date.now();
-    const timeSinceLastAttempt = now - lastAttemptTime;
-    if (timeSinceLastAttempt < 3000 && lastAttemptTime > 0) {
-      toast.warning('Espera un momento', {
-        description: 'Debes esperar entre intentos de login',
+    if (lastAttemptTime > 0 && now - lastAttemptTime < 3000) {
+      toast.warning('Esperá un momento', {
+        description: 'Debes esperar unos segundos entre intentos.',
       });
       return;
     }
@@ -116,74 +141,52 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Obtener instancia de auth (lazy loading)
       const auth = getAuthInstance();
-      
-      // Configurar persistencia antes del login
       await configureAuthPersistence(auth, rememberMe);
-      
-      // Intentar login
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      
-      // Registrar intento exitoso
+
       sessionManager.recordLoginAttempt(email, true);
       sessionManager.clearLoginAttempts(email);
-      
-      // Crear sesión
       sessionManager.createSession(userCredential.user, rememberMe);
-      
-      toast.success('¡Bienvenido!', {
-        description: `Sesión iniciada ${rememberMe ? 'y guardada' : 'temporalmente'}`,
+
+      toast.success('Sesión iniciada', {
+        description: 'Accediste correctamente al panel administrador.',
       });
-      
       router.push('/admin');
     } catch (error) {
-      console.error('Error al iniciar sesión:', error);
-      
-      // Registrar intento fallido
       sessionManager.recordLoginAttempt(email, false);
-      
-      // Determinar mensaje de error
-      const errorMessage = 'Error al iniciar sesión';
-      let errorDescription = 'Verifica tus credenciales';
-      
-      // Firebase Auth errors have a 'code' property
+
+      let description = 'Verificá tus credenciales.';
       if (error && typeof error === 'object' && 'code' in error) {
-        const firebaseError = error as { code: string };
-        switch (firebaseError.code) {
+        switch ((error as { code: string }).code) {
           case 'auth/invalid-credential':
           case 'auth/user-not-found':
           case 'auth/wrong-password':
-            errorDescription = 'Email o contraseña incorrectos';
+            description = 'Email o contraseña incorrectos.';
             break;
           case 'auth/too-many-requests':
-            errorDescription = 'Demasiados intentos. Intenta más tarde';
+            description = 'Demasiados intentos. Esperá unos minutos.';
             break;
           case 'auth/user-disabled':
-            errorDescription = 'Cuenta deshabilitada';
+            description = 'Tu cuenta se encuentra deshabilitada.';
             break;
           case 'auth/network-request-failed':
-            errorDescription = 'Error de conexión. Verifica tu internet';
+            description = 'No pudimos conectarnos. Revisá tu internet.';
             break;
           default:
-            errorDescription = 'Error de autenticación';
+            description = 'No se pudo iniciar sesión.';
         }
       }
-      
-      toast.error(errorMessage, {
-        description: errorDescription,
-      });
-      
-      // Verificar si ahora está bloqueado
+
+      toast.error('Error al iniciar sesión', { description });
+
       const nowBlocked = sessionManager.isUserBlocked(email);
       if (nowBlocked) {
+        const remaining = sessionManager.getBlockTimeRemaining(email);
         setIsBlocked(true);
-        const timeRemaining = sessionManager.getBlockTimeRemaining(email);
-        setBlockTimeRemaining(timeRemaining);
-        
-        const minutes = Math.ceil(timeRemaining / 60000);
+        setBlockTimeRemaining(remaining);
         toast.warning('Cuenta bloqueada temporalmente', {
-          description: `Demasiados intentos fallidos. Intenta en ${minutes} minuto(s)`,
+          description: `Intentá nuevamente en ${Math.ceil(remaining / 60000)} minuto(s).`,
         });
       }
     } finally {
@@ -191,132 +194,354 @@ export default function LoginPage() {
     }
   };
 
-  const formatBlockTime = (ms: number): string => {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  const handleStartRecovery = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalized = normalizeDni(dni);
+    if (normalized.length < 7) {
+      toast.error('Ingresá un DNI válido.');
+      return;
+    }
+
+    setRecoveryLoading(true);
+    try {
+      const response = await fetch('/api/auth/password-recovery/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'admin', dni: normalized }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.challengeToken) {
+        throw new Error(data?.error || 'No pudimos validar tu identidad.');
+      }
+
+      setChallengeToken(String(data.challengeToken));
+      setView('recover-reset');
+      toast.success('Identidad validada', {
+        description: 'Ahora podés definir una nueva contraseña.',
+      });
+    } catch (error) {
+      toast.error('No pudimos continuar', {
+        description: error instanceof Error ? error.message : 'Probá nuevamente.',
+      });
+    } finally {
+      setRecoveryLoading(false);
+    }
   };
 
-  return (
-    <div className="min-h-screen bg-[#2BB8BF] px-4 py-10">
-      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center">
-        <Card className="w-full overflow-hidden rounded-[28px] border-0 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.20)]">
-          <CardContent className="p-7 sm:p-8">
-            <div className="mb-8 flex flex-col items-center text-center">
-              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2BB8BF] p-3 shadow-[0_14px_34px_rgba(43,184,191,0.35)]">
-                {isRemoteUrl(logoSrc) ? (
-                  <img src={logoSrc} alt={logoAlt} className="h-full w-full object-contain" />
-                ) : (
-                  <Image
-                    src={logoSrc}
-                    alt={logoAlt}
-                    width={48}
-                    height={48}
-                    className="h-full w-full object-contain"
-                  />
-                )}
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#2BB8BF]">Admin</p>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Ingresar</h2>
-              </div>
-            </div>
+  const handleCompleteRecovery = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!challengeToken) {
+      toast.error('La sesión de recuperación ya no es válida.');
+      setView('recover-dni');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Las contraseñas no coinciden.');
+      return;
+    }
+    if (passwordHint) {
+      toast.error(passwordHint);
+      return;
+    }
 
-            {isBlocked && (
-              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <p className="font-semibold">Acceso bloqueado</p>
-                  <p className="mt-1 text-red-700">Probá de nuevo en {formatBlockTime(blockTimeRemaining)}.</p>
-                </div>
-              </div>
-            )}
+    setRecoveryLoading(true);
+    try {
+      const response = await fetch('/api/auth/password-recovery/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeToken,
+          newPassword,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || 'No pudimos cambiar tu contraseña.');
+      }
 
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-slate-700">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={ADMIN_EMAIL}
-                  required
-                  disabled={loading || isBlocked}
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 text-base shadow-none focus:border-[#2BB8BF] focus:ring-[#2BB8BF]/20 disabled:opacity-50"
-                  autoComplete="email"
-                />
-              </div>
+      setView('recover-success');
+      setChallengeToken('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Contraseña actualizada', {
+        description: 'Ya podés ingresar con tu nueva clave.',
+      });
+    } catch (error) {
+      toast.error('No pudimos actualizar la contraseña', {
+        description: error instanceof Error ? error.message : 'Probá nuevamente.',
+      });
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                  Contraseña
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => setCapsLock((e as any).getModifierState?.('CapsLock') ?? false)}
-                    onKeyUp={(e) => setCapsLock((e as any).getModifierState?.('CapsLock') ?? false)}
-                    placeholder="••••••••"
-                    required
-                    disabled={loading || isBlocked}
-                    className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 pr-11 text-base shadow-none focus:border-[#2BB8BF] focus:ring-[#2BB8BF]/20 disabled:opacity-50"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                    onClick={() => setShowPassword((v) => !v)}
-                    disabled={loading || isBlocked}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {capsLock && (
-                  <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    Bloq Mayús activado
-                  </div>
-                )}
-              </div>
+  const renderLogin = () => (
+    <form onSubmit={handleLogin} className="space-y-5">
+      {isBlocked ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Acceso bloqueado temporalmente</p>
+            <p className="mt-1 text-amber-800">
+              Esperá {Math.max(1, Math.ceil(blockTimeRemaining / 60000))} minuto(s) antes de volver a intentar.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
-              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <Label htmlFor="rememberMe" className="text-sm font-medium text-slate-700">
-                  Mantener sesión
-                </Label>
-                <Checkbox
-                  id="rememberMe"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                  disabled={loading || isBlocked}
-                  className="h-5 w-5 border-slate-300 data-[state=checked]:border-[#2BB8BF] data-[state=checked]:bg-[#2BB8BF]"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                className="h-12 w-full rounded-2xl bg-[#2BB8BF] text-base font-semibold text-white shadow-[0_14px_28px_rgba(43,184,191,0.30)] transition hover:bg-[#26a8af]"
-                disabled={loading || isBlocked}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Ingresando...
-                  </>
-                ) : (
-                  'Ingresar'
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+      <div className="space-y-2">
+        <Label htmlFor="email" className="text-sm font-semibold text-[#24335B]">
+          Email
+        </Label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7F8AA5]" />
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder={ADMIN_EMAIL}
+            autoComplete="email"
+            disabled={!canInteract}
+            className="h-12 rounded-2xl border-[#D6DEEC] bg-white px-4 pr-11 text-[15px] shadow-none"
+          />
+        </div>
       </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="password" className="text-sm font-semibold text-[#24335B]">
+          Contraseña
+        </Label>
+        <div className="relative">
+          <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7F8AA5]" />
+          <Input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => setCapsLock((event as any).getModifierState?.('CapsLock') ?? false)}
+            onKeyUp={(event) => setCapsLock((event as any).getModifierState?.('CapsLock') ?? false)}
+            placeholder="Ingresá tu contraseña"
+            autoComplete="current-password"
+            disabled={!canInteract}
+            className="h-12 rounded-2xl border-[#D6DEEC] bg-white px-11 pr-11 text-[15px] shadow-none"
+          />
+          <button
+            type="button"
+            aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            onClick={() => setShowPassword((value) => !value)}
+            disabled={!canInteract}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[#7F8AA5] transition hover:bg-[#F2F5FB] hover:text-[#223460]"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+        {capsLock ? (
+          <p className="text-xs text-amber-700">Bloq Mayús activado.</p>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <label className="inline-flex items-center gap-2 text-[#50607F]">
+          <Checkbox
+            checked={rememberMe}
+            onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
+            disabled={!canInteract}
+            className="border-[#C7D2E5] data-[state=checked]:border-[#0F1F52] data-[state=checked]:bg-[#0F1F52]"
+          />
+          Recordarme
+        </label>
+
+        <button
+          type="button"
+          onClick={() => setView('recover-dni')}
+          className="font-medium text-[#2354E6] transition hover:text-[#1639A8]"
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
+      </div>
+
+      <Button
+        type="submit"
+        disabled={!canInteract}
+        className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,#0F1F52_0%,#0B2F7D_100%)] text-sm font-semibold text-white shadow-[0_14px_30px_rgba(15,31,82,0.26)] transition hover:opacity-95"
+      >
+        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        Iniciar sesión
+      </Button>
+    </form>
+  );
+
+  const renderRecoverDni = () => (
+    <form onSubmit={handleStartRecovery} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="dni" className="text-sm font-semibold text-[#24335B]">
+          DNI
+        </Label>
+        <div className="relative">
+          <IdCard className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7F8AA5]" />
+          <Input
+            id="dni"
+            inputMode="numeric"
+            value={dni}
+            onChange={(event) => setDni(normalizeDni(event.target.value))}
+            placeholder="Ingresá tu número de DNI"
+            disabled={recoveryLoading || !domainAllowed}
+            className="h-12 rounded-2xl border-[#D6DEEC] bg-white px-11 text-[15px] shadow-none"
+          />
+        </div>
+      </div>
+
+      <Button
+        type="submit"
+        disabled={recoveryLoading || !domainAllowed}
+        className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,#0F1F52_0%,#0B2F7D_100%)] text-sm font-semibold text-white shadow-[0_14px_30px_rgba(15,31,82,0.26)] transition hover:opacity-95"
+      >
+        {recoveryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        Validar identidad
+      </Button>
+    </form>
+  );
+
+  const renderRecoverReset = () => (
+    <form onSubmit={handleCompleteRecovery} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="newPassword" className="text-sm font-semibold text-[#24335B]">
+          Nueva contraseña
+        </Label>
+        <div className="relative">
+          <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7F8AA5]" />
+          <Input
+            id="newPassword"
+            type={showNewPassword ? 'text' : 'password'}
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            placeholder="Creá una contraseña segura"
+            disabled={recoveryLoading}
+            className="h-12 rounded-2xl border-[#D6DEEC] bg-white px-11 pr-11 text-[15px] shadow-none"
+          />
+          <button
+            type="button"
+            onClick={() => setShowNewPassword((value) => !value)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[#7F8AA5] transition hover:bg-[#F2F5FB] hover:text-[#223460]"
+          >
+            {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="confirmPassword" className="text-sm font-semibold text-[#24335B]">
+          Confirmar contraseña
+        </Label>
+        <div className="relative">
+          <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7F8AA5]" />
+          <Input
+            id="confirmPassword"
+            type={showConfirmPassword ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Repetí la nueva contraseña"
+            disabled={recoveryLoading}
+            className="h-12 rounded-2xl border-[#D6DEEC] bg-white px-11 pr-11 text-[15px] shadow-none"
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword((value) => !value)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[#7F8AA5] transition hover:bg-[#F2F5FB] hover:text-[#223460]"
+          >
+            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[#E1E7F2] bg-[#F8FAFD] px-4 py-3 text-xs leading-5 text-[#5E6B88]">
+        <p className="font-semibold text-[#24335B]">Tu nueva contraseña debe incluir:</p>
+        <ul className="mt-1 space-y-1">
+          <li>8 caracteres o más</li>
+          <li>Mayúscula, minúscula, número y símbolo</li>
+          {newPassword ? <li>{passwordHint ?? 'La estructura es válida.'}</li> : null}
+        </ul>
+      </div>
+
+      <Button
+        type="submit"
+        disabled={recoveryLoading}
+        className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,#0F1F52_0%,#0B2F7D_100%)] text-sm font-semibold text-white shadow-[0_14px_30px_rgba(15,31,82,0.26)] transition hover:opacity-95"
+      >
+        {recoveryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        Guardar nueva contraseña
+      </Button>
+    </form>
+  );
+
+  const renderRecoverSuccess = () => (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
+        Tu contraseña fue actualizada correctamente. Ya podés volver al panel e ingresar con la nueva clave.
+      </div>
+      <Button
+        type="button"
+        onClick={resetRecoveryState}
+        className="h-12 w-full rounded-2xl bg-[linear-gradient(135deg,#0F1F52_0%,#0B2F7D_100%)] text-sm font-semibold text-white shadow-[0_14px_30px_rgba(15,31,82,0.26)] transition hover:opacity-95"
+      >
+        Volver al inicio de sesión
+      </Button>
     </div>
+  );
+
+  if (view === 'recover-dni') {
+    return (
+      <AuthPortalShell
+        roleLabel="Panel Admin"
+        title="Recuperar contraseña"
+        subtitle="Ingresá tu DNI para validar tu identidad y continuar con el cambio de contraseña."
+        icon={<ShieldCheck className="h-9 w-9" />}
+        backLabel="Volver al login"
+        onBack={resetRecoveryState}
+      >
+        {renderRecoverDni()}
+      </AuthPortalShell>
+    );
+  }
+
+  if (view === 'recover-reset') {
+    return (
+      <AuthPortalShell
+        roleLabel="Panel Admin"
+        title="Nueva contraseña"
+        subtitle="Definí una nueva clave segura. El acceso de recuperación es temporal y de un solo uso."
+        icon={<KeyRound className="h-9 w-9" />}
+        backLabel="Volver al login"
+        onBack={resetRecoveryState}
+      >
+        {renderRecoverReset()}
+      </AuthPortalShell>
+    );
+  }
+
+  if (view === 'recover-success') {
+    return (
+      <AuthPortalShell
+        roleLabel="Panel Admin"
+        title="Contraseña actualizada"
+        subtitle="El proceso finalizó correctamente y tu cuenta ya quedó protegida con la nueva contraseña."
+        icon={<Check className="h-9 w-9" />}
+        status="success"
+      >
+        {renderRecoverSuccess()}
+      </AuthPortalShell>
+    );
+  }
+
+  return (
+    <AuthPortalShell
+      roleLabel="Panel Admin"
+      title="Panel Admin"
+      subtitle="Accedé a tu cuenta para continuar con la gestión interna de BAFT."
+      icon={<ShieldCheck className="h-9 w-9" />}
+    >
+      {renderLogin()}
+    </AuthPortalShell>
   );
 }

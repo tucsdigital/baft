@@ -428,7 +428,7 @@ export default function CheckoutClient({ experience, date, people, pax, initialE
                       >
                         <div className="flex items-center gap-4">
                           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8F4FF]">
-                            {isLoading ? <Loader2 className="h-6 w-6 animate-spin text-[#009EE3]" /> : <img src="/images/mercado-pago-logo.png" alt="Mercado Pago" className="h-6" />}
+                            {isLoading ? <Loader2 className="h-6 w-6 animate-spin text-[#009EE3]" /> : <img src="/images/mercado-pago-logo_white.png" alt="Mercado Pago" className="h-6" />}
                           </div>
                           <div>
                             <div className="text-base font-bold text-[#0B2240]">Mercado Pago</div>

@@ -164,7 +164,7 @@ export default function PackageForm(props: Props) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto space-y-6 pb-12">
       <div className="flex items-center gap-4">
         <Button asChild variant="outline" size="sm">
           <Link href="/admin/paquetes">
@@ -315,25 +315,29 @@ export default function PackageForm(props: Props) {
                 <Label>
                   Categorias <span className="text-red-500">*</span>
                 </Label>
-                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2 max-h-48 overflow-y-auto">
-                  {categorias.map((cat) => {
-                    const checked = (categoriaIds || []).includes(cat.id);
-                    return (
-                      <label key={cat.id} className="flex items-center gap-2.5 cursor-pointer">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(next) => {
-                            const want = next === true;
-                            const current = categoriaIds || [];
-                            const updated = want ? Array.from(new Set([...current, cat.id])) : current.filter((id) => id !== cat.id);
-                            setValue('categoriaIds', updated, { shouldValidate: true });
-                          }}
-                          className="border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
-                        />
-                        <span className="text-sm text-gray-700">{cat.nombre}</span>
-                      </label>
-                    );
-                  })}
+                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="space-y-2 h-48 overflow-y-auto pr-1">
+                    {categorias.map((cat) => {
+                      const checked = (categoriaIds || []).includes(cat.id);
+                      return (
+                        <label key={cat.id} className="flex items-center gap-2.5 cursor-pointer">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(next) => {
+                              const want = next === true;
+                              const current = categoriaIds || [];
+                              const updated = want
+                                ? Array.from(new Set([...current, cat.id]))
+                                : current.filter((id) => id !== cat.id);
+                              setValue('categoriaIds', updated, { shouldValidate: true });
+                            }}
+                            className="border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
+                          />
+                          <span className="text-sm text-gray-700">{cat.nombre}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
                 {errors.categoriaIds && <p className="text-base text-red-500 mt-1">{errors.categoriaIds.message as string}</p>}
               </div>
@@ -342,7 +346,7 @@ export default function PackageForm(props: Props) {
                 <Label>
                   Tipo <span className="text-red-500">*</span>
                 </Label>
-                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 h-3/4 flex flex-col">
                   <div className="flex gap-2">
                     <Input
                       value={newTypeLabel}
@@ -368,30 +372,36 @@ export default function PackageForm(props: Props) {
                     </Button>
                   </div>
 
-                  {excursionTypeOptions.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      Aún no hay tipos creados. Agregá el primero con el botón `+`.
-                    </p>
-                  ) : (
-                    excursionTypeOptions.map((opt) => {
-                    const checked = (tipos || []).includes(opt.value);
-                    return (
-                      <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(next) => {
-                            const want = next === true;
-                            const current = normalizePackageTypes(tipos || []);
-                            const updated = want ? Array.from(new Set([...current, opt.value])) : current.filter((item) => item !== opt.value);
-                            setValue('tipos', updated as PackageAdminFormData['tipos'], { shouldValidate: true });
-                          }}
-                          className="border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
-                        />
-                        <span className="text-sm text-gray-700">{opt.label}</span>
-                      </label>
-                    );
-                    })
-                  )}
+                  <div className="mt-3 flex-1 overflow-y-auto pr-1">
+                    {excursionTypeOptions.length === 0 ? (
+                      <p className="text-sm text-gray-500">
+                        Aún no hay tipos creados. Agregá el primero con el botón `+`.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {excursionTypeOptions.map((opt) => {
+                          const checked = (tipos || []).includes(opt.value);
+                          return (
+                            <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(next) => {
+                                  const want = next === true;
+                                  const current = normalizePackageTypes(tipos || []);
+                                  const updated = want
+                                    ? Array.from(new Set([...current, opt.value]))
+                                    : current.filter((item) => item !== opt.value);
+                                  setValue('tipos', updated as PackageAdminFormData['tipos'], { shouldValidate: true });
+                                }}
+                                className="border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
+                              />
+                              <span className="text-sm text-gray-700">{opt.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {errors.tipos && <p className="text-base text-red-500 mt-1">{errors.tipos.message as string}</p>}
               </div>
@@ -513,8 +523,8 @@ export default function PackageForm(props: Props) {
 
                 <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="space-y-0.5">
-                    <Label htmlFor="mostrarDesde" className="text-base font-medium cursor-pointer">Mostrar "Desde"</Label>
-                    <p className="text-sm text-gray-500">Se mostrara "Desde $XXX" en la tarjeta</p>
+                    <Label htmlFor="mostrarDesde" className="text-base font-medium cursor-pointer">Mostrar &quot;Desde&quot;</Label>
+                    <p className="text-sm text-gray-500">Se mostrara &quot;Desde $XXX&quot; en la tarjeta</p>
                   </div>
                   <Switch id="mostrarDesde" checked={mostrarDesde} onCheckedChange={(checked) => setValue('mostrarDesde', checked)} />
                 </div>
