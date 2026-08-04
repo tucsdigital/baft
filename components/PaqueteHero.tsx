@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Clock, Flame, MapPin } from 'lucide-react';
 import type { Paquete } from '@/types';
 import { getPackageFeatures } from '@/lib/utils/packageFeatures';
+import { humanizeExcursionType } from '@/lib/packages/package-types';
 
 interface PaqueteHeroProps {
   paquete: Paquete;
@@ -87,19 +88,7 @@ export default function PaqueteHero({
           {!hideBadges && (
             <div className="flex items-center flex-wrap gap-2 mb-4">
               <Badge className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/20 border border-white/30 text-base">
-                {paquete.tipo === 'individual'
-                  ? 'Individual'
-                  : paquete.tipo === 'grupal'
-                    ? 'Grupal'
-                    : paquete.tipo === 'internacional'
-                      ? 'Internacional'
-                      : paquete.tipo === 'educativo'
-                        ? 'Educativo'
-                        : paquete.tipo === 'eventos'
-                          ? 'Eventos'
-                          : paquete.tipo === 'recitales'
-                            ? 'Recitales'
-                            : 'A Medida'}
+                {humanizeExcursionType((Array.isArray(paquete.tipos) && paquete.tipos[0]) || paquete.tipo) || 'Excursión'}
               </Badge>
               {paquete.destacado && (
                 <Badge className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/20 border border-white/30 text-base">

@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createPreference, getCheckoutUrl, mercadopagoEnabled } from '@/lib/mercadopago';
 import { getPaqueteBySlug, getPaqueteById } from '@/lib/paquetes';
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, orderBy, query, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { computeBaseCapacity, getAvailableForPackageDate, getHeldPeople, getStockDelta, toMillis } from '@/lib/cart/server';
+import { addMinutes, computeBaseCapacity, getAvailableForPackageDate, getHeldPeople, getHoldMinutes, getStockDelta, toMillis } from '@/lib/cart/server';
 import { orderExternalReference } from '@/lib/orders';
 import { getSeatDepartureId, seatIdsFromLabels } from '@/lib/seats/server';
 import type { SeatLayoutTemplate } from '@/types';
 import { computeReservationPricing, getAdministrativeFeeExtraSelection, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
+import { getPeopleBreakdownTotal, normalizePeopleBreakdown, normalizePeopleCategories } from '@/lib/packages/people-categories';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,7 @@ const payloadSchema = z.object({
   packageId: z.string().min(1).optional(),
   date: z.string().optional(),
   people: z.number().int().min(1).max(50).optional(),
+  peopleBreakdown: z.record(z.string(), z.number().int().min(0).max(50)).optional(),
   customerEmail: z.string().email().optional(),
   customerName: z.string().max(200).optional(),
   customerPhone: z.string().max(50).optional(),
@@ -46,6 +48,18 @@ const payloadSchema = z.object({
 }, { message: 'Faltan datos.' });
 
 const getSiteUrl = () => process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+
+function sameOrigin(request: Request): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return true;
+  const site = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!site) return true;
+  try {
+    return new URL(origin).origin === new URL(site).origin;
+  } catch {
+    return false;
+  }
+}
 
 function getRequestBaseUrl(request: Request): string {
   const forwardedProto = request.headers.get('x-forwarded-proto');
@@ -175,6 +189,10 @@ function withQueryParams(url: string, params: Record<string, string | number | n
 }
 
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: 'Origen no autorizado.' }, { status: 403 });
+  }
+
   if (!mercadopagoEnabled) {
     return NextResponse.json(
       { error: 'Falta configurar MERCADO_PAGO_ACCESS_TOKEN.' },
@@ -751,9 +769,41 @@ export async function POST(request: Request) {
   const bc = paquete.bookingConfig;
   const departureConfig = resolveDepartureConfig(paquete, date);
   const maxPeople = departureConfig.maxPeople;
-  const people = peopleMaybe ?? 0;
+  const maxPerBooking = Math.max(
+    1,
+    Math.min(50, Math.min(maxPeople, typeof bc?.maxPeoplePerBooking === 'number' ? bc.maxPeoplePerBooking : maxPeople))
+  );
+  const peopleCategories = normalizePeopleCategories((bc as any)?.peopleCategories, maxPerBooking);
+  const breakdownRaw = (parsed.data as any).peopleBreakdown;
+  const breakdown = breakdownRaw ? normalizePeopleBreakdown({ breakdown: breakdownRaw, categories: peopleCategories }) : null;
+  const breakdownTotal = breakdown ? getPeopleBreakdownTotal(breakdown) : 0;
+  const people = breakdown ? breakdownTotal : peopleMaybe ?? 0;
+
+  if (breakdownRaw) {
+    const sumMin = peopleCategories.reduce((acc, cat) => acc + Math.max(0, Number(cat.min) || 0), 0);
+    if (people < sumMin) {
+      return NextResponse.json({ error: 'Cantidad de pasajeros inválida.' }, { status: 400 });
+    }
+    for (const cat of peopleCategories) {
+      const rawVal = (breakdownRaw as any)[cat.key];
+      const num = typeof rawVal === 'number' ? rawVal : Number(rawVal);
+      if (!Number.isFinite(num)) {
+        return NextResponse.json({ error: 'Cantidad de pasajeros inválida.' }, { status: 400 });
+      }
+      const val = Math.floor(num);
+      if (val < cat.min || val > cat.max) {
+        return NextResponse.json({ error: 'Cantidad de pasajeros inválida.' }, { status: 400 });
+      }
+    }
+    if (typeof peopleMaybe === 'number' && peopleMaybe !== people) {
+      return NextResponse.json({ error: 'Cantidad de pasajeros inválida.' }, { status: 400 });
+    }
+  }
   if (people > maxPeople) {
     return NextResponse.json({ error: 'Cantidad de personas inválida.' }, { status: 400 });
+  }
+  if (date === 'sin-fecha' && departureConfig.exists) {
+    return NextResponse.json({ error: 'Debés seleccionar una fecha para esta excursión.' }, { status: 400 });
   }
   if (people > 1 && (passengerDetails?.length ?? 0) !== people - 1) {
     return NextResponse.json({ error: 'Faltan los datos de los demás pasajeros.' }, { status: 400 });
@@ -790,8 +840,14 @@ export async function POST(request: Request) {
   const directSelectedExtras = [getAdministrativeFeeExtraSelection(paquete)].filter(
     (item): item is NonNullable<ReturnType<typeof getAdministrativeFeeExtraSelection>> => Boolean(item)
   );
+  const peopleAdults =
+    breakdown && typeof (breakdown as any).adults === 'number' ? Math.max(0, Math.floor((breakdown as any).adults)) : null;
+  const peopleMinors =
+    breakdown && typeof (breakdown as any).minors === 'number' ? Math.max(0, Math.floor((breakdown as any).minors)) : null;
   const computedPricing = computeReservationPricing(paquete, date, {
     people,
+    peopleAdults,
+    peopleMinors,
     roomType: roomType ?? null,
     selectedExtras: directSelectedExtras,
   });
@@ -834,11 +890,65 @@ export async function POST(request: Request) {
     }
   );
 
-  // Registrar intento de checkout para trazabilidad
+  // Registrar intento de checkout + hold de cupo (si aplica)
   const now = Timestamp.now();
   const intentRef = doc(collection(db, 'checkoutIntents'));
   const intentId = intentRef.id;
   const externalReference = `pkg-${paquete.id}-${Date.now()}`;
+  let holdId: string | null = null;
+  let holdExpiresAt: Timestamp | null = null;
+
+  if (date !== 'sin-fecha') {
+    const holdRef = doc(collection(db, 'reservationHolds'));
+    holdId = holdRef.id;
+    holdExpiresAt = addMinutes(now, getHoldMinutes());
+    const lockRef = doc(db, 'stockHolds', `${paquete.id}_${date}`);
+    const baseCapacity = computeBaseCapacity(paquete, date);
+    const delta = await getStockDelta(paquete.id, date);
+
+    const ok = await runTransaction(db, async (tx) => {
+      const lockSnap = await tx.get(lockRef);
+      const heldPeople = lockSnap.exists() ? Math.max(0, Number((lockSnap.data() as any)?.heldPeople ?? 0) || 0) : 0;
+      const remaining = Math.max(0, baseCapacity + delta - heldPeople);
+      if (people > remaining) return false;
+
+      tx.set(
+        holdRef,
+        {
+          status: 'active',
+          source: 'direct_checkout',
+          packageId: paquete.id,
+          packageSlug: paquete.slug,
+          date,
+          people,
+          peopleAdults,
+          peopleMinors,
+          ...(breakdown ? { peopleBreakdown: breakdown } : {}),
+          checkoutIntentId: intentId,
+          externalReference,
+          expiresAt: holdExpiresAt,
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+
+      if (!lockSnap.exists()) {
+        tx.set(lockRef, { packageId: paquete.id, date, heldPeople: people, createdAt: now, updatedAt: now });
+      } else {
+        tx.update(lockRef, { heldPeople: heldPeople + people, updatedAt: now });
+      }
+
+      return true;
+    });
+
+    if (!ok) {
+      return NextResponse.json(
+        { error: 'El cupo cambió. Actualizá y elegí otra fecha o menos personas.' },
+        { status: 400 }
+      );
+    }
+  }
 
   await setDoc(intentRef, {
     status: 'created',
@@ -848,6 +958,11 @@ export async function POST(request: Request) {
     packageTitle: paquete.titulo,
     date,
     people,
+    peopleAdults,
+    peopleMinors,
+    ...(breakdown ? { peopleBreakdown: breakdown } : {}),
+    holdId,
+    holdExpiresAt,
     unitPrice,
     selectedExtras: directSelectedExtras.length ? directSelectedExtras : null,
     baseSubtotalAmount: computedPricing.baseSubtotalAmount,

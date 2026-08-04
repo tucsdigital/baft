@@ -24,7 +24,7 @@ export function extractGoogleMapsEmbedUrl(input: string): string {
 
   const pathname = parsed.pathname.toLowerCase();
   const output = parsed.searchParams.get('output');
-  if (pathname.includes('/maps/embed') || output === 'embed') {
+  if (pathname.includes('/maps/embed') || pathname.includes('/maps/d/embed') || output === 'embed') {
     return parsed.toString();
   }
 

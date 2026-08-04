@@ -12,6 +12,14 @@ import {
   getMaxSelectablePeople,
   type BookingAvailabilityItem,
 } from '@/lib/packages/booking-calendar';
+import {
+  clampPeopleBreakdownToMax,
+  getPeopleBreakdownTotal,
+  normalizePeopleBreakdown,
+  normalizePeopleCategories,
+  type PeopleBreakdown,
+  type PeopleCategoryConfig,
+} from '@/lib/packages/people-categories';
 
 interface PaqueteSidebarProps {
   paquete: Paquete;
@@ -58,6 +66,10 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   const duracion = paquete.duracion || '-';
   const bookingEnabled = paquete.bookingConfig?.enabled !== false;
   const maxPeoplePerBooking = paquete.bookingConfig?.maxPeoplePerBooking ?? paquete.capacidadMaxima ?? 6;
+  const peopleCategories: PeopleCategoryConfig[] = useMemo(
+    () => normalizePeopleCategories((paquete.bookingConfig as any)?.peopleCategories, maxPeoplePerBooking),
+    [maxPeoplePerBooking, paquete.bookingConfig]
+  );
   const specialPrice = Number(paquete.precioDescuentoPrimerosCupos ?? 0);
   const specialDeadline = formatPromoDeadline(paquete.tarifaEspecialFechaLimite);
   const specialDeadlineDate = parsePromoDeadline(paquete.tarifaEspecialFechaLimite);
@@ -67,9 +79,12 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     specialPrice < paquete.precio &&
     Boolean(specialDeadline) &&
     Boolean(specialDeadlineDate && specialDeadlineDate.getTime() >= Date.now());
-  const [step, setStep] = useState<'calendar' | 'people'>('calendar');
+  const [step, setStep] = useState<'people' | 'calendar'>('people');
   const [selectedDate, setSelectedDate] = useState('');
-  const [people, setPeople] = useState(1);
+  const [pax, setPax] = useState<PeopleBreakdown>(() =>
+    normalizePeopleBreakdown({ breakdown: null, categories: peopleCategories })
+  );
+  const people = Math.max(1, Math.floor(getPeopleBreakdownTotal(pax)));
   const whatsappHref = useMemo(() => getWhatsAppLinkForPackage(paquete.titulo), [paquete.titulo]);
   const paymentMethods = ['VISA', 'mastercard', 'NARANJA', 'mercado pago'];
 
@@ -78,37 +93,45 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     [bookingDates]
   );
 
-  const firstAvailableDate = useMemo(
-    () => visibleBookingDates.find((item) => item.available > 0)?.date || '',
-    [visibleBookingDates]
-  );
-
   const selectedAvailability = useMemo(
     () => visibleBookingDates.find((item) => item.date === selectedDate) ?? null,
     [selectedDate, visibleBookingDates]
   );
 
-  const maxSelectablePeople = getMaxSelectablePeople(selectedAvailability?.available ?? 0, maxPeoplePerBooking);
+  const maxSelectablePeopleForDate = getMaxSelectablePeople(selectedAvailability?.available ?? 0, maxPeoplePerBooking);
 
   useEffect(() => {
-    if (!selectedDate && firstAvailableDate) {
-      setSelectedDate(firstAvailableDate);
-    }
-  }, [firstAvailableDate, selectedDate]);
+    const safeMax = Math.max(1, Math.floor(Number(maxPeoplePerBooking) || 1));
+    const normalizedCategories = normalizePeopleCategories((paquete.bookingConfig as any)?.peopleCategories, safeMax);
+    const normalized = normalizePeopleBreakdown({ breakdown: pax, categories: normalizedCategories });
+    const clamped = clampPeopleBreakdownToMax({
+      breakdown: normalized,
+      categories: normalizedCategories,
+      maxPeoplePerBooking: safeMax,
+    });
+    setPax((current) => (JSON.stringify(current) === JSON.stringify(clamped) ? current : clamped));
+  }, [maxPeoplePerBooking, paquete.bookingConfig, pax]);
 
   useEffect(() => {
-    if (maxSelectablePeople <= 0) {
-      setPeople(1);
+    if (!selectedDate || !selectedAvailability) return;
+    if (maxSelectablePeopleForDate <= 0) {
+      setSelectedDate('');
+      setStep('calendar');
       return;
     }
-    if (people > maxSelectablePeople) {
-      setPeople(maxSelectablePeople);
-    }
-  }, [maxSelectablePeople, people]);
+    if (people <= maxSelectablePeopleForDate) return;
+    setPax((current) =>
+      clampPeopleBreakdownToMax({
+        breakdown: current,
+        categories: peopleCategories,
+        maxPeoplePerBooking: maxSelectablePeopleForDate,
+      })
+    );
+  }, [maxSelectablePeopleForDate, people, peopleCategories, selectedAvailability, selectedDate]);
 
   const bookingHref = `/checkout?slug=${encodeURIComponent(paquete.slug)}&date=${encodeURIComponent(
     selectedDate || 'sin-fecha'
-  )}&people=${encodeURIComponent(String(people))}`;
+  )}&people=${encodeURIComponent(String(people))}&pax=${encodeURIComponent(JSON.stringify(pax))}`;
 
   const months = buildBookingWindowMonths(new Date());
 
@@ -196,19 +219,135 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
 
           {bookingEnabled ? (
             <div className="rounded-2xl border border-[#D6E8F7] bg-white p-4">
-              {step === 'calendar' ? (
+              {step === 'people' ? (
                 <div className="space-y-4">
-                  <div>
-                    <div className="text-base font-extrabold text-[#0D223F]">Elegí tu fecha</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-base font-extrabold text-[#0D223F]">Cantidad de personas</div>
+                    </div>
+                    {visibleBookingDates.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setStep('calendar')}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-[#2BB8BF] transition hover:text-[#1C9FA6]"
+                      >
+                        Elegir fecha
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
 
-                  {visibleBookingDates.length > 0 ? (
+                  <div className="rounded-2xl border border-[#D6E8F7] bg-[#F8FBFF] px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha</div>
+                    <div className="mt-1 text-sm font-bold text-[#0D223F]">
+                      {visibleBookingDates.length > 0 ? 'Elegís la fecha en el siguiente paso' : 'A coordinar'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#D6E8F7] bg-white p-4">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <Users className="h-4 w-4 text-[#2BB8BF]" />
+                      Personas
+                    </div>
+
+                    <div className="mt-3 grid gap-3">
+                      {peopleCategories.map((category) => {
+                        const value = Math.max(0, Number(pax[category.key] ?? category.min) || 0);
+                        const canIncrement = people < maxPeoplePerBooking && value < category.max;
+                        const canDecrement = value > category.min;
+                        const minLabel = category.min > 0 ? `Mínimo ${category.min}` : 'Opcional';
+                        return (
+                          <div
+                            key={category.key}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-[#D6E8F7] bg-[#F8FBFF] px-4 py-3"
+                          >
+                            <div>
+                              <div className="text-sm font-bold text-[#0D223F]">{category.label}</div>
+                              <div className="text-xs text-slate-500">{minLabel}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPax((current) => ({
+                                    ...current,
+                                    [category.key]: Math.max(category.min, (Number(current[category.key] ?? 0) || 0) - 1),
+                                  }))
+                                }
+                                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#C7DBEE] bg-white text-lg font-bold text-[#0D223F] transition hover:bg-[#F8FBFF] disabled:opacity-60"
+                                aria-label={`Restar ${category.label}`}
+                                disabled={!canDecrement}
+                              >
+                                -
+                              </button>
+                              <div className="min-w-[42px] text-center text-lg font-black text-[#0D223F]">{value}</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!canIncrement) return;
+                                  setPax((current) => ({
+                                    ...current,
+                                    [category.key]: Math.min(category.max, (Number(current[category.key] ?? 0) || 0) + 1),
+                                  }));
+                                }}
+                                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#C7DBEE] bg-white text-lg font-bold text-[#0D223F] transition hover:bg-[#F8FBFF] disabled:opacity-60"
+                                aria-label={`Sumar ${category.label}`}
+                                disabled={!canIncrement}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div className="rounded-2xl bg-[#F8FBFF] px-4 py-3 text-sm text-slate-600">
+                        Total: <span className="font-extrabold text-[#0D223F]">{people}</span> · Máximo por reserva:{' '}
+                        <span className="font-extrabold text-[#0D223F]">{maxPeoplePerBooking}</span>
+                      </div>
+                    </div>
+
+                    {visibleBookingDates.length === 0 ? (
+                      <>
+                        <Link
+                          href={bookingHref}
+                          className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-[#F6C000] font-extrabold text-[#082032] transition hover:bg-[#E9B400] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C000]/35 focus-visible:ring-offset-2 active:bg-[#DCA900]"
+                        >
+                          Reservar
+                          <ChevronRight className="ml-1 h-4 w-4" />
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-base font-extrabold text-[#0D223F]">Elegí tu fecha</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        Disponibilidad para <span className="font-extrabold text-[#0D223F]">{people}</span>{' '}
+                        {people === 1 ? 'persona' : 'personas'}.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStep('people')}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-[#2BB8BF] transition hover:text-[#1C9FA6]"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Cambiar personas
+                    </button>
+                  </div>
+
+                  {visibleBookingDates.some((item) => item.available >= people) ? (
                     <div className="space-y-3">
                       {months.map(({ year, month }) => {
                         const cells = buildBookingCalendarMonth({
                           year,
                           month,
                           entries: visibleBookingDates,
+                          requiredPeople: people,
                         });
 
                         return (
@@ -234,10 +373,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                     <button
                                       key={cell.isoDate}
                                       type="button"
-                                      onClick={() => {
-                                        setSelectedDate(cell.isoDate);
-                                        setStep('people');
-                                      }}
+                                      onClick={() => setSelectedDate(cell.isoDate)}
                                       className={`${sharedClasses} ${
                                         isSelected
                                           ? 'bg-[#0D223F] text-white'
@@ -268,89 +404,33 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                       })}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-[#C7DBEE] bg-[#F8FBFF] px-4 py-6 text-center">
-                      <div className="text-sm font-semibold text-[#0D223F]">Próximamente nuevas fechas</div>
-                      <p className="mt-1 text-xs text-slate-500">Consultanos y te avisamos apenas se habiliten.</p>
+                    <div className="rounded-2xl border border-[#F2D5DB] bg-[#FFF5F7] px-4 py-4 text-sm font-semibold text-[#9F1239]">
+                      No hay fechas con cupo para {people} {people === 1 ? 'persona' : 'personas'}. Probá bajar la cantidad.
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-base font-extrabold text-[#0D223F]">Cantidad de personas</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setStep('calendar')}
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-[#2BB8BF] transition hover:text-[#1C9FA6]"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Cambiar fecha
-                    </button>
-                  </div>
 
-                  <div className="rounded-2xl border border-[#D6E8F7] bg-[#F8FBFF] px-4 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha seleccionada</div>
-                    <div className="mt-1 text-sm font-bold text-[#0D223F]">{formatDateLabel(selectedDate)}</div>
-                    {selectedAvailability ? (
-                      <div className="mt-2 text-xs text-slate-600">
-                        Cupos disponibles: <span className="font-bold text-[#166534]">{selectedAvailability.available}</span>
-                        {selectedAvailability.capacity > 0 ? ` de ${selectedAvailability.capacity}` : ''}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-2xl border border-[#D6E8F7] bg-white p-4">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <Users className="h-4 w-4 text-[#2BB8BF]" />
-                      Personas
-                    </div>
-
-                    {maxSelectablePeople > 0 ? (
-                      <>
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setPeople((current) => Math.max(1, current - 1))}
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#C7DBEE] bg-[#F8FBFF] text-xl font-bold text-[#0D223F] transition hover:bg-white"
-                            aria-label="Restar persona"
-                          >
-                            -
-                          </button>
-                          <div className="min-w-[96px] text-center">
-                            <div className="text-[28px] font-black text-[#0D223F]">{people}</div>
-                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">personas</div>
+                  {selectedDate ? (
+                    <>
+                      <div className="rounded-2xl border border-[#D6E8F7] bg-white p-4">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha seleccionada</div>
+                        <div className="mt-1 text-sm font-bold text-[#0D223F]">{formatDateLabel(selectedDate)}</div>
+                        {selectedAvailability ? (
+                          <div className="mt-2 text-xs text-slate-600">
+                            Cupos disponibles: <span className="font-bold text-[#166534]">{selectedAvailability.available}</span>
+                            {selectedAvailability.capacity > 0 ? ` de ${selectedAvailability.capacity}` : ''}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setPeople((current) => Math.min(maxSelectablePeople, current + 1))}
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#C7DBEE] bg-[#F8FBFF] text-xl font-bold text-[#0D223F] transition hover:bg-white"
-                            aria-label="Sumar persona"
-                          >
-                            +
-                          </button>
-                        </div>
-
-                        <div className="mt-3 rounded-2xl bg-[#F8FBFF] px-4 py-3 text-sm text-slate-600">
-                          Podés reservar hasta <span className="font-bold text-[#0D223F]">{maxSelectablePeople}</span>{' '}
-                          {maxSelectablePeople === 1 ? 'persona' : 'personas'} en esta operación.
-                        </div>
-
-                        <Link
-                          href={bookingHref}
-                          className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-[#F6C000] font-extrabold text-[#082032] transition hover:bg-[#E9B400] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C000]/35 focus-visible:ring-offset-2 active:bg-[#DCA900]"
-                        >
-                          Continuar al checkout
-                          <ChevronRight className="ml-1 h-4 w-4" />
-                        </Link>
-                      </>
-                    ) : (
-                      <div className="mt-3 rounded-2xl border border-[#F2D5DB] bg-[#FFF5F7] px-4 py-3 text-sm font-semibold text-[#9F1239]">
-                        La fecha seleccionada se quedó sin cupo. Volvé al calendario y elegí otra opción.
+                        ) : null}
                       </div>
-                    )}
-                  </div>
+
+                      <Link
+                        href={bookingHref}
+                        className="flex h-11 w-full items-center justify-center rounded-2xl bg-[#F6C000] font-extrabold text-[#082032] transition hover:bg-[#E9B400] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F6C000]/35 focus-visible:ring-offset-2 active:bg-[#DCA900]"
+                      >
+                        Reservar
+                        <ChevronRight className="ml-1 h-4 w-4" />
+                      </Link>
+                    </>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -372,7 +452,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
           <div className="space-y-2 rounded-2xl border border-[#D6E8F7] bg-white p-4 text-sm text-slate-700">
             <div className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#16A34A]" />
-              <span>Elegís fecha con disponibilidad real antes de avanzar</span>
+              <span>{visibleBookingDates.length > 0 ? 'Elegís fecha con disponibilidad real antes de avanzar' : 'Reservás sin fecha y coordinamos la salida'}</span>
             </div>
             <div className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#16A34A]" />

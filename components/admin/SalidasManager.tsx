@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormattedAmountInput } from '@/components/ui/formatted-amount-input';
@@ -8,10 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, Pencil, Trash2, Plus, X, Check } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import type { Salida, SeatLayoutTemplate } from '@/types';
+import type { Salida } from '@/types';
 
 interface SalidasManagerProps {
   salidas: Salida[];
@@ -21,7 +18,6 @@ interface SalidasManagerProps {
 export default function SalidasManager({ salidas, onSalidasChange }: SalidasManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [templates, setTemplates] = useState<Array<Pick<SeatLayoutTemplate, 'id' | 'name' | 'busType'>>>([]);
   
   const [formData, setFormData] = useState<Omit<Salida, 'id'>>({
     fecha: '',
@@ -31,8 +27,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
     moneda: 'ARS',
     cupo: undefined,
     observaciones: '',
-    seatSelectionEnabled: false,
-    seatLayoutId: '',
   });
 
   const resetForm = () => {
@@ -44,32 +38,8 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
       moneda: 'ARS',
       cupo: undefined,
       observaciones: '',
-      seatSelectionEnabled: false,
-      seatLayoutId: '',
     });
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const col = collection(db, 'seatLayouts');
-        const q = query(col, orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
-        const items = snap.docs.map((d) => {
-          const data: any = d.data();
-          return { id: d.id, name: String(data?.name ?? ''), busType: String(data?.busType ?? '') };
-        }).filter((it) => Boolean(it.id) && Boolean(it.name));
-        if (!cancelled) setTemplates(items);
-      } catch {
-        if (!cancelled) setTemplates([]);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleAdd = () => {
     if (!formData.fecha || !formData.fechaVuelta || formData.precio <= 0) {
@@ -112,8 +82,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
       moneda: salida.moneda,
       cupo: salida.cupo,
       observaciones: salida.observaciones || '',
-      seatSelectionEnabled: Boolean(salida.seatSelectionEnabled),
-      seatLayoutId: salida.seatLayoutId ?? '',
     });
   };
 
@@ -131,8 +99,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
       precio: Number(formData.precio) || 0,
       moneda: formData.moneda,
       observaciones: formData.observaciones?.trim() || '',
-      seatSelectionEnabled: Boolean(formData.seatSelectionEnabled),
-      seatLayoutId: formData.seatSelectionEnabled ? (formData.seatLayoutId?.trim() || '') : '',
     };
     
     // Solo agregar cupo si tiene un valor válido
@@ -176,8 +142,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
   const sortedSalidas = [...salidas].sort((a, b) => 
     new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
   );
-
-  const templateOptions = useMemo(() => templates, [templates]);
 
   return (
     <div className="space-y-4">
@@ -297,51 +261,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
-              <div className="space-y-0.5">
-                <Label className="text-sm">Selección de butacas</Label>
-                <p className="text-xs text-gray-500">Habilitar mapa tipo cine para esta salida.</p>
-              </div>
-              <Switch
-                checked={Boolean(formData.seatSelectionEnabled)}
-                onCheckedChange={(checked) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    seatSelectionEnabled: checked,
-                    seatLayoutId: checked ? prev.seatLayoutId : '',
-                  }));
-                }}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-sm">Plantilla de micro</Label>
-              <Select
-                value={formData.seatLayoutId || ''}
-                onValueChange={(value) => setFormData({ ...formData, seatLayoutId: value })}
-                disabled={!formData.seatSelectionEnabled}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={formData.seatSelectionEnabled ? 'Seleccioná una plantilla' : 'Deshabilitado'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {templateOptions.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      No hay plantillas creadas
-                    </SelectItem>
-                  ) : (
-                    templateOptions.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}{t.busType ? ` · ${t.busType}` : ''}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           <div className="flex gap-2 justify-end">
             <Button
               type="button"
@@ -407,15 +326,6 @@ export default function SalidasManager({ salidas, onSalidasChange }: SalidasMana
                   {salida.observaciones && (
                     <p className="text-sm text-gray-600 mt-2">
                       {salida.observaciones}
-                    </p>
-                  )}
-
-                  {salida.seatSelectionEnabled && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      Butacas: <span className="font-semibold text-gray-900">habilitado</span>
-                      {salida.seatLayoutId ? (
-                        <span className="text-gray-500"> · plantilla {salida.seatLayoutId}</span>
-                      ) : null}
                     </p>
                   )}
                 </div>

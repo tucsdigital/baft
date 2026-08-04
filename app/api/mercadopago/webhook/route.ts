@@ -1158,6 +1158,7 @@ export async function POST(request: Request) {
     const packageId = intentData.packageId || intentData.experienceId;
     const packageSlug = intentData.packageSlug || intentData.experienceSlug;
     const packageTitle = intentData.packageTitle || intentData.experienceTitle || intentData.intentTitle;
+    const holdId = typeof (intentData as any)?.holdId === 'string' ? String((intentData as any).holdId).trim() : '';
     const {
       date,
       people,
@@ -1181,6 +1182,7 @@ export async function POST(request: Request) {
     // Determinar estado de la reserva
     const reservationStatus = mapPaymentStatusToReservationStatus(paymentStatus);
     const isPixPending = paymentStatus === 'pending' || paymentStatus === 'in_process';
+    const shouldReleaseHold = !isApproved && !isPixPending;
 
     // Datos del pagador (del pago de MP)
     const payer = paymentInfo.payer;
@@ -1449,6 +1451,32 @@ export async function POST(request: Request) {
             baseCapacityAtThatTime: baseCapacity,
             createdAt: now,
           });
+        }
+
+        if (holdId && packageId && date && date !== 'sin-fecha') {
+          const holdRef = doc(db, 'reservationHolds', holdId);
+          const holdSnap = await tx.get(holdRef);
+          if (holdSnap.exists()) {
+            const holdData: any = holdSnap.data();
+            const holdStatus = String(holdData?.status ?? '');
+            const holdWasActive = holdStatus === 'active';
+            if (holdWasActive && isApproved) {
+              tx.update(holdRef, { status: 'consumed', consumedAt: now, paymentId: String(paymentId), updatedAt: now });
+            } else if (holdWasActive && shouldReleaseHold) {
+              tx.update(holdRef, { status: 'released', releasedAt: now, paymentId: String(paymentId), updatedAt: now });
+            }
+
+            if (holdWasActive && (isApproved || shouldReleaseHold)) {
+              const lockRef = doc(db, 'stockHolds', `${packageId}_${date}`);
+              const lockSnap = await tx.get(lockRef);
+              const heldPeople = lockSnap.exists() ? Number((lockSnap.data() as any)?.heldPeople ?? 0) : 0;
+              if (!lockSnap.exists()) {
+                tx.set(lockRef, { packageId, date, heldPeople: 0, createdAt: now, updatedAt: now });
+              } else {
+                tx.update(lockRef, { heldPeople: Math.max(0, Math.floor(heldPeople - people)), updatedAt: now });
+              }
+            }
+          }
         }
 
         // Email al cliente (solo si aprobado)

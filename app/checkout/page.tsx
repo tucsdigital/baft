@@ -1,11 +1,19 @@
 import { redirect } from 'next/navigation';
 import { getPaqueteBySlug, toBookingPublicData } from '@/lib/paquetes';
 import CheckoutClient from '@/components/checkout/CheckoutClient';
+import {
+  clampPeopleBreakdownToMax,
+  getPeopleBreakdownTotal,
+  getDefaultPeopleCategories,
+  normalizePeopleBreakdown,
+  normalizePeopleCategories,
+  type PeopleBreakdown,
+} from '@/lib/packages/people-categories';
 
 /** Sin caché: datos de experiencia y reserva siempre actualizados */
 export const revalidate = 0;
 
-type SearchParams = Promise<{ slug?: string; date?: string; people?: string; cart?: string }>;
+type SearchParams = Promise<{ slug?: string; date?: string; people?: string; pax?: string; cart?: string }>;
 
 export default async function CheckoutPage({
   searchParams,
@@ -15,6 +23,7 @@ export default async function CheckoutPage({
   const params = await searchParams;
   const slug = params.slug?.trim();
   const dateParam = params.date?.trim();
+  const paxParam = params.pax?.trim();
   if (params.cart === '1') redirect('/excursiones');
   if (!slug) redirect('/');
 
@@ -62,6 +71,8 @@ export default async function CheckoutPage({
   const bookingData = toBookingPublicData(paquete as any, {});
   const parsedPeople = Number(params.people ?? '1');
   const people = Number.isFinite(parsedPeople) ? Math.max(1, Math.min(50, Math.floor(parsedPeople))) : 1;
+  const maxPeoplePerBooking = bookingData?.maxPeoplePerBooking ?? people;
+  const peopleCategories = normalizePeopleCategories((paquete.bookingConfig as any)?.peopleCategories, maxPeoplePerBooking);
 
   const hasSpecificDates = bookingData?.hasSpecificDates ?? true;
   const isNoDate = !dateParam || dateParam === 'sin-fecha';
@@ -77,7 +88,37 @@ export default async function CheckoutPage({
     redirect('/');
   }
 
-  const safePeople = Math.min(people, bookingData?.maxPeoplePerBooking ?? people);
+  let checkoutError: string | null = null;
+  const categoriesForCheckout = peopleCategories.length ? peopleCategories : getDefaultPeopleCategories(maxPeoplePerBooking);
+  let paxInput: unknown = paxParam || null;
+  let paxInvalid = false;
+  if (paxParam) {
+    try {
+      paxInput = JSON.parse(paxParam);
+    } catch {
+      paxInvalid = true;
+      paxInput = null;
+    }
+  }
+  let pax: PeopleBreakdown = normalizePeopleBreakdown({ breakdown: paxInput, categories: categoriesForCheckout });
+  if (!paxParam) {
+    const sumMin = getPeopleBreakdownTotal(pax);
+    const target = Math.min(people, maxPeoplePerBooking);
+    let remaining = Math.max(0, target - sumMin);
+    if (remaining > 0 && categoriesForCheckout[0]) {
+      const firstKey = categoriesForCheckout[0].key;
+      pax = {
+        ...pax,
+        [firstKey]: Math.min(categoriesForCheckout[0].max, (Number(pax[firstKey] ?? 0) || 0) + remaining),
+      };
+    }
+  }
+  pax = clampPeopleBreakdownToMax({ breakdown: pax, categories: categoriesForCheckout, maxPeoplePerBooking });
+  const safePeople = Math.max(1, Math.min(maxPeoplePerBooking, getPeopleBreakdownTotal(pax)));
+  if (paxInvalid) {
+    checkoutError = 'La selección de pasajeros no es válida. Volvé a intentarlo.';
+    pax = normalizePeopleBreakdown({ breakdown: null, categories: categoriesForCheckout });
+  }
 
-  return <CheckoutClient experience={experience as any} date={date} people={safePeople} />;
+  return <CheckoutClient experience={experience as any} date={date} people={safePeople} pax={pax} initialError={checkoutError} />;
 }

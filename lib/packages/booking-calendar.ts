@@ -57,8 +57,10 @@ export function buildBookingCalendarMonth(args: {
   year: number;
   month: number;
   entries: BookingAvailabilityItem[];
+  requiredPeople?: number;
 }) {
-  const { year, month, entries } = args;
+  const { year, month, entries, requiredPeople } = args;
+  const minRequired = Math.max(1, Math.floor(Number(requiredPeople) || 1));
   const availabilityMap = new Map(entries.map((entry) => [entry.date, entry]));
   const firstDay = new Date(year, month, 1);
   const startOffset = (firstDay.getDay() + 6) % 7;
@@ -71,7 +73,7 @@ export function buildBookingCalendarMonth(args: {
     const availability = availabilityMap.get(isoDate);
     const available = Math.max(0, Number(availability?.available ?? 0) || 0);
     const capacity = Math.max(0, Number(availability?.capacity ?? 0) || 0);
-    const isAvailable = available > 0;
+    const isAvailable = available >= minRequired;
     const isSoldOut = Boolean(availability) && available <= 0;
 
     cells.push({

@@ -31,7 +31,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 export default function Footer() {
-  const logoSrc = getBrandLogoSrc();
+  const logoSrc = '/images/logo_white.png';
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || '{{siteName}} Logo');
   const developer = siteConfig.company.developerCredits;
   const telefonos = [CONTACT_INFO.telefono, CONTACT_INFO.telefonoSecundario].filter(Boolean).join(' / ');

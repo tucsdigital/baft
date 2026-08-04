@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Control, FieldErrors, UseFormRegister, UseFormSetValue, UseFormWatch } from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from 'lucide-react';
@@ -23,16 +24,18 @@ import { toast } from 'sonner';
 import type { Categoria, Salida } from '@/types';
 import {
   DEFAULT_CONDICIONES,
-  TIPO_OPTIONS,
   TRANSPORTE_OPTIONS,
   type CondicionItem,
   normalizePackageTypes,
   type PackageAdminFormData,
 } from '@/lib/packages/admin-form';
+import { humanizeExcursionType, type ExcursionTypeOption } from '@/lib/packages/package-types';
 
 type Props = {
   mode: 'create' | 'edit';
   categorias: Categoria[];
+  excursionTypes: ExcursionTypeOption[];
+  onCreateExcursionType: (label: string) => Promise<ExcursionTypeOption | null>;
   register: UseFormRegister<PackageAdminFormData>;
   control: Control<PackageAdminFormData>;
   watch: UseFormWatch<PackageAdminFormData>;
@@ -74,6 +77,8 @@ export default function PackageForm(props: Props) {
   const {
     mode,
     categorias,
+    excursionTypes,
+    onCreateExcursionType,
     register,
     control,
     watch,
@@ -110,6 +115,8 @@ export default function PackageForm(props: Props) {
     submitLabel,
     submittingLabel,
   } = props;
+  const [newTypeLabel, setNewTypeLabel] = useState('');
+  const [creatingType, setCreatingType] = useState(false);
 
   const visible = watch('visible');
   const destacado = watch('destacado');
@@ -123,6 +130,38 @@ export default function PackageForm(props: Props) {
   const reservasHabilitadas = watch('reservasHabilitadas');
   const titulo = watch('titulo');
   const isBusy = loading || submitState === 'validating' || submitState === 'saving';
+  const excursionTypeOptions = [
+    ...excursionTypes,
+    ...normalizePackageTypes(tipos || [])
+      .filter((value) => !excursionTypes.some((item) => item.value === value))
+      .map((value) => ({
+        id: `legacy-${value}`,
+        value,
+        label: humanizeExcursionType(value) || value,
+      })),
+  ];
+
+  const handleCreateType = async () => {
+    const trimmed = newTypeLabel.trim();
+    if (!trimmed || creatingType) return;
+
+    try {
+      setCreatingType(true);
+      const created = await onCreateExcursionType(trimmed);
+      if (!created) return;
+
+      const current = normalizePackageTypes(tipos || []);
+      setValue('tipos', normalizePackageTypes([...current, created.value]) as PackageAdminFormData['tipos'], {
+        shouldValidate: true,
+      });
+      setNewTypeLabel('');
+    } catch (error) {
+      console.error('Error creating excursion type:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el tipo');
+    } finally {
+      setCreatingType(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -303,8 +342,38 @@ export default function PackageForm(props: Props) {
                 <Label>
                   Tipo <span className="text-red-500">*</span>
                 </Label>
-                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-                  {TIPO_OPTIONS.map((opt) => {
+                <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newTypeLabel}
+                      onChange={(event) => setNewTypeLabel(event.target.value)}
+                      placeholder="Crear nuevo tipo"
+                      className="bg-white"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void handleCreateType();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void handleCreateType()}
+                      disabled={creatingType || !newTypeLabel.trim()}
+                      aria-label="Crear tipo"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {excursionTypeOptions.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      Aún no hay tipos creados. Agregá el primero con el botón `+`.
+                    </p>
+                  ) : (
+                    excursionTypeOptions.map((opt) => {
                     const checked = (tipos || []).includes(opt.value);
                     return (
                       <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
@@ -321,7 +390,8 @@ export default function PackageForm(props: Props) {
                         <span className="text-sm text-gray-700">{opt.label}</span>
                       </label>
                     );
-                  })}
+                    })
+                  )}
                 </div>
                 {errors.tipos && <p className="text-base text-red-500 mt-1">{errors.tipos.message as string}</p>}
               </div>
@@ -703,6 +773,132 @@ export default function PackageForm(props: Props) {
                 El usuario podrá reservar hasta este límite en una sola operación. El calendario además validará el cupo disponible de cada día.
               </p>
               {errors.maxPersonasPorReserva && <p className="text-base text-red-500 mt-1">{errors.maxPersonasPorReserva.message}</p>}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <Label className="text-base">Categorías de pasajeros</Label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Define los mínimos y máximos por tipo. El total siempre se limita por el máximo por reserva y por el cupo disponible.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const currentMax = Math.max(1, Number(watch('maxPersonasPorReserva') ?? 1) || 1);
+                    const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                    const index = current.length + 1;
+                    const baseKey = `cat-${index}`;
+                    const nextKey = current.some((item) => item?.key === baseKey) ? `cat-${Date.now()}` : baseKey;
+                    setValue(
+                      'peopleCategories',
+                      [
+                        ...current,
+                        {
+                          key: nextKey,
+                          label: `Categoría ${index}`,
+                          min: 0,
+                          max: currentMax,
+                        },
+                      ] as any,
+                      { shouldValidate: true }
+                    );
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar categoría
+                </Button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {(Array.isArray(watch('peopleCategories')) ? watch('peopleCategories') : []).map((item: any, index: number) => (
+                  <div
+                    key={`${item?.key || 'cat'}-${index}`}
+                    className="grid gap-3 rounded-lg border border-gray-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_160px_120px_120px_40px]"
+                  >
+                    <div className="space-y-1">
+                      <Label className="text-sm text-gray-600">Nombre</Label>
+                      <Input
+                        value={String(item?.label ?? '')}
+                        onChange={(event) => {
+                          const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                          const next = current.map((row, idx) => (idx === index ? { ...row, label: event.target.value } : row));
+                          setValue('peopleCategories', next as any, { shouldValidate: true });
+                        }}
+                        placeholder="Ej: Adultos"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-sm text-gray-600">Clave</Label>
+                      <Input
+                        value={String(item?.key ?? '')}
+                        onChange={(event) => {
+                          const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                          const next = current.map((row, idx) => (idx === index ? { ...row, key: event.target.value } : row));
+                          setValue('peopleCategories', next as any, { shouldValidate: true });
+                        }}
+                        placeholder="adultos"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-sm text-gray-600">Mín</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        value={Number(item?.min ?? 0)}
+                        onChange={(event) => {
+                          const value = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                          const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                          const next = current.map((row, idx) => (idx === index ? { ...row, min: value } : row));
+                          setValue('peopleCategories', next as any, { shouldValidate: true });
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-sm text-gray-600">Máx</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        value={Number(item?.max ?? 0)}
+                        onChange={(event) => {
+                          const maxTotal = Math.max(1, Number(watch('maxPersonasPorReserva') ?? 1) || 1);
+                          const value = Math.max(0, Math.min(50, Math.min(maxTotal, Math.floor(Number(event.target.value) || 0))));
+                          const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                          const next = current.map((row, idx) => (idx === index ? { ...row, max: value } : row));
+                          setValue('peopleCategories', next as any, { shouldValidate: true });
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-end justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const current = Array.isArray(watch('peopleCategories')) ? (watch('peopleCategories') as any[]) : [];
+                          const next = current.filter((_, idx) => idx !== index);
+                          setValue('peopleCategories', next as any, { shouldValidate: true });
+                        }}
+                        aria-label="Eliminar categoría"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {errors.peopleCategories && (
+                <p className="mt-2 text-base text-red-500">{(errors.peopleCategories as any)?.message ?? 'Revisa las categorías.'}</p>
+              )}
             </div>
           </CardContent>
         </Card>

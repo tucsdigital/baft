@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { SITE_NAME, CONTACT_INFO, SITE_URL, SITE_DESCRIPTION } from '@/lib/constants';
 import SchemaOrg from '@/components/SchemaOrg';
 import PageTransition from '@/components/PageTransition';
-import { renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { buildPageTitle, renderTemplate, siteConfig } from '@/lib/siteConfig';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -42,8 +42,8 @@ const r2PublicOrigin = (() => {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: renderTemplate(siteConfig.seo.titleDefaultTemplate),
-    template: renderTemplate(siteConfig.seo.titleTemplate),
+    default: buildPageTitle(renderTemplate(siteConfig.seo.titleDefaultTemplate)),
+    template: '%s',
   },
   description: SITE_DESCRIPTION,
   keywords: siteConfig.seo.keywords,

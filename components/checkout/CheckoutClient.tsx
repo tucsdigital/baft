@@ -11,6 +11,7 @@ import { ArgentineDateInput } from '@/components/ui/argentine-date-input';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import type { PeopleBreakdown } from '@/lib/packages/people-categories';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,6 +23,8 @@ type CheckoutClientProps = {
   experience: Experience;
   date: string;
   people: number;
+  pax?: PeopleBreakdown;
+  initialError?: string | null;
 };
 
 type CheckoutStep = 'form' | 'payment';
@@ -54,12 +57,12 @@ function formatAmount(amount: number, currency: string) {
   }).format(amount)} ${normalized}`;
 }
 
-export default function CheckoutClient({ experience, date, people }: CheckoutClientProps) {
+export default function CheckoutClient({ experience, date, people, pax, initialError }: CheckoutClientProps) {
   const travelerCount = Math.max(1, people);
   const storageKey = getCheckoutStorageKey(experience.slug, date, travelerCount);
   const [step, setStep] = useState<CheckoutStep>('form');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [touched, setTouched] = useState({
@@ -221,6 +224,7 @@ export default function CheckoutClient({ experience, date, people }: CheckoutCli
           packageId: experience.id,
           date,
           people: travelerCount,
+          ...(pax ? { peopleBreakdown: pax } : {}),
           customerEmail: form.customerEmail.trim(),
           customerName: `${form.customerFirstName.trim()} ${form.customerLastName.trim()}`.trim(),
           customerPhone: form.customerPhone.trim() || undefined,

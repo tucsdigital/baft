@@ -10,6 +10,7 @@ import { Clock, MapPin, ArrowRight, Share2 } from 'lucide-react';
 import { Paquete } from '@/types';
 import { getPackageFeatures } from '@/lib/utils/packageFeatures';
 import { toast } from 'sonner';
+import { humanizeExcursionType } from '@/lib/packages/package-types';
 
 interface PaqueteCardProps {
   paquete: Paquete;
@@ -69,11 +70,7 @@ export default function PaqueteCard({
       : paquete.destino || 'BAFT';
   const badgeTexto = badgeLabel
     ? badgeLabel
-    : paquete.tipo === 'individual'
-      ? 'Individual'
-      : paquete.tipo === 'grupal'
-        ? 'Grupal'
-        : 'A Medida';
+    : humanizeExcursionType((Array.isArray(paquete.tipos) && paquete.tipos[0]) || paquete.tipo) || 'Excursión';
   const imagenSrc =
     paquete.imagenTarjeta || paquete.imagenPrincipal || paquete.imagenCard || '/images/placeholder-package.jpg';
   const promoPrice = Number(paquete.precioDescuentoPrimerosCupos ?? 0);

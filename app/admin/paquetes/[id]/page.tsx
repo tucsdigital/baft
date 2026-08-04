@@ -17,8 +17,9 @@ import { revalidateFrontPaths } from '@/lib/revalidate';
 import type { Paquete, Categoria } from '@/types';
 import PackageForm from '@/components/admin/PackageForm';
 import { usePackageEditorState } from '@/components/admin/usePackageEditorState';
-import { countFeaturedPackages, fetchActiveCategorias } from '@/lib/packages/admin-queries';
+import { countFeaturedPackages, createExcursionType, fetchActiveCategorias, subscribeExcursionTypes } from '@/lib/packages/admin-queries';
 import { syncPackageCategoryData } from '@/lib/packages/category-utils';
+import { normalizePeopleCategories } from '@/lib/packages/people-categories';
 import {
   collectFormErrorMessages,
   countFormErrors,
@@ -36,6 +37,7 @@ import {
   packageAdminFormSchema,
   type PackageAdminFormData,
 } from '@/lib/packages/admin-form';
+import type { ExcursionTypeOption } from '@/lib/packages/package-types';
 
 export default function EditarPaquetePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -45,6 +47,7 @@ export default function EditarPaquetePage({ params }: { params: Promise<{ id: st
   const [submitMessage, setSubmitMessage] = useState('');
   const [currentPackage, setCurrentPackage] = useState<Paquete | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [excursionTypes, setExcursionTypes] = useState<ExcursionTypeOption[]>([]);
   const [destacadosCount, setDestacadosCount] = useState(0);
   const [wasDestacado, setWasDestacado] = useState(false);
   const router = useRouter();
@@ -67,7 +70,10 @@ export default function EditarPaquetePage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catData, destacadosOtros] = await Promise.all([fetchActiveCategorias(), countFeaturedPackages(id)]);
+        const [catData, destacadosOtros] = await Promise.all([
+          fetchActiveCategorias(),
+          countFeaturedPackages(id),
+        ]);
         setCategorias(catData);
         setDestacadosCount(destacadosOtros);
 
@@ -102,7 +108,9 @@ export default function EditarPaquetePage({ params }: { params: Promise<{ id: st
           setValue('mostrarDesde', data.mostrarDesde ?? true); // Default true para retrocompatibilidad
           setValue('duracion', data.duracion);
           setValue('reservasHabilitadas', data.bookingConfig?.enabled !== false);
-          setValue('maxPersonasPorReserva', data.bookingConfig?.maxPeoplePerBooking ?? data.capacidadMaxima ?? 6);
+          const maxPersonas = data.bookingConfig?.maxPeoplePerBooking ?? data.capacidadMaxima ?? 6;
+          setValue('maxPersonasPorReserva', maxPersonas);
+          setValue('peopleCategories', normalizePeopleCategories((data.bookingConfig as any)?.peopleCategories, maxPersonas));
           setValue('visible', data.visible);
           setValue('destacado', data.destacado);
           setValue('ctaWhatsApp', data.ctaWhatsApp);
@@ -121,6 +129,23 @@ export default function EditarPaquetePage({ params }: { params: Promise<{ id: st
 
     fetchData();
   }, [hydrateFromPackage, id, router, setValue]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeExcursionTypes(
+      (items) => setExcursionTypes(items),
+      (error) => {
+        console.error('Error syncing excursion types:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCreateExcursionType = async (label: string) => {
+    const created = await createExcursionType(label);
+    toast.success('Tipo creado correctamente');
+    return created;
+  };
 
   const onSubmit = async (data: PackageAdminFormData) => {
     setSubmitState('saving');
@@ -367,6 +392,8 @@ export default function EditarPaquetePage({ params }: { params: Promise<{ id: st
           <PackageForm
             mode="edit"
             categorias={categorias}
+            excursionTypes={excursionTypes}
+            onCreateExcursionType={handleCreateExcursionType}
             register={register}
             control={control}
             watch={watch}

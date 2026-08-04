@@ -31,7 +31,7 @@ import { getBrandLogoSrc, isRemoteUrl, renderTemplate, siteConfig } from '@/lib/
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Categorías', href: '/admin/categorias', icon: FolderKanban },
-  { name: 'Paquetes', href: '/admin/paquetes', icon: Package },
+  { name: 'Excursiones', href: '/admin/paquetes', icon: Package },
   { name: 'Ventas', href: '/admin/ventas', icon: Handshake },
   { name: 'Vendedores', href: '/admin/vendedores', icon: Users },
   { name: 'Banners', href: '/admin/banners', icon: ImageIcon },

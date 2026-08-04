@@ -16,8 +16,8 @@ export default function HomeHero({ paquetes, backgroundImage }: Props) {
   const bg = backgroundImage || hero.backgroundImage || "/images/hero-placeholder.svg";
 
   return (
-    <section className="relative isolate overflow-x-hidden overflow-y-visible">
-      <div className="relative min-h-[420px] sm:min-h-[500px] md:min-h-[580px] lg:min-h-[640px]">
+    <section className="relative isolate overflow-hidden">
+      <div className="relative min-h-[420px] pb-8 sm:min-h-[500px] sm:pb-10 md:min-h-[580px] md:pb-12 lg:min-h-[640px] lg:pb-14">
         <Image
           src={bg}
           alt=""
@@ -29,9 +29,9 @@ export default function HomeHero({ paquetes, backgroundImage }: Props) {
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/25 to-black/60" />
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white via-white/70 to-transparent" />
 
-        <div className="relative z-10 container mx-auto flex min-h-[420px] items-center justify-center px-4 py-10 sm:min-h-[500px] sm:py-12 md:min-h-[580px] md:px-6 md:py-16 lg:min-h-[640px] lg:px-8 lg:py-20">
+        <div className="relative z-10 container mx-auto flex min-h-[420px] items-end justify-center px-4 pb-4 pt-16 sm:min-h-[500px] sm:pb-5 sm:pt-20 md:min-h-[580px] md:px-6 md:pb-8 md:pt-24 lg:min-h-[640px] lg:px-8 lg:pb-10 lg:pt-28">
           <motion.div
-            className="w-full max-w-5xl max-[360px]:translate-y-10 min-[361px]:max-[375px]:translate-y-12 min-[376px]:max-[425px]:translate-y-14 min-[426px]:max-[767px]:translate-y-16 md:translate-y-12 lg:translate-y-16"
+            className="w-full max-w-5xl"
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}

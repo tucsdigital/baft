@@ -46,7 +46,7 @@ export default function LoadingExcursionDetail() {
         <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="space-y-5">
             <div className="rounded-3xl border border-[#D4E6F7] bg-white p-6 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_280px]">
+              <div className="">
                 <div className="animate-pulse space-y-3">
                   <div className="h-9 w-80 rounded bg-[#DCEBFA]" />
                   <Line w="w-96" />

@@ -266,7 +266,7 @@ function mapSimpleSiteConfig(input: Record<string, any>): Partial<SiteConfig> {
       siteDescription,
       siteUrlDefault: 'https://example.com',
       logo: {
-        imagePath: logoValue.startsWith('/') ? logoValue : '/images/logo_baft.png',
+        imagePath: logoValue.startsWith('/') ? logoValue : '/images/logo.png',
         imageUrl: logoValue.startsWith('http') ? logoValue : '',
         titleText: siteName,
         altTextTemplate: '{{siteName}}',
@@ -315,7 +315,7 @@ function mapSimpleSiteConfig(input: Record<string, any>): Partial<SiteConfig> {
       locale: 'es_AR',
       titleDefaultTemplate: ensureString(input.seo?.title, siteName),
       titleTemplate: `%s | ${siteName}`,
-      openGraphImagePath: ensurePathOrUrl(input.seo?.image, logoValue || '/images/logo_baft.png'),
+      openGraphImagePath: ensurePathOrUrl(input.seo?.image, logoValue || '/images/logo.png'),
       keywords: [
         siteName.toLowerCase(),
         'patagonia',
@@ -525,14 +525,16 @@ const DEFAULT_SITE_CONFIG: SiteConfig = {
 };
 
 function normalizeSiteConfig(input: SiteConfig): SiteConfig {
-  const siteName = ensureString(input.branding?.siteName, DEFAULT_SITE_CONFIG.branding.siteName);
+  const rawSiteName = ensureString(input.branding?.siteName, DEFAULT_SITE_CONFIG.branding.siteName);
+  const siteName = rawSiteName.trim().toLowerCase() === 'baft' ? 'BAFT' : rawSiteName;
   const siteDescription = ensureString(input.branding?.siteDescription, DEFAULT_SITE_CONFIG.branding.siteDescription);
   const siteUrlDefault = ensureAbsoluteUrl(input.branding?.siteUrlDefault, DEFAULT_SITE_CONFIG.branding.siteUrlDefault);
 
-  const logoTitleText = ensureString(
+  const rawLogoTitleText = ensureString(
     input.branding?.logo?.titleText,
     ensureString(siteName, DEFAULT_SITE_CONFIG.branding.logo.titleText)
   );
+  const logoTitleText = rawLogoTitleText.trim().toLowerCase() === 'baft' ? 'BAFT' : rawLogoTitleText;
 
   return {
     branding: {
@@ -703,6 +705,14 @@ export function renderTemplate(template: string, vars?: Record<string, string>) 
     (acc, [key, value]) => acc.replaceAll(`{{${key}}}`, value),
     template
   );
+}
+
+export function buildPageTitle(pageTitle?: string | null) {
+  const siteName = siteConfig.branding.siteName;
+  const normalizedPageTitle = String(pageTitle ?? '').trim();
+  if (!normalizedPageTitle) return siteName;
+  if (normalizedPageTitle.toLowerCase() === siteName.toLowerCase()) return siteName;
+  return `${normalizedPageTitle} | ${siteName}`;
 }
 
 export function getBrandLogoSrc() {

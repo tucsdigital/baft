@@ -12,21 +12,12 @@ import { X, SlidersHorizontal, Search, ChevronLeft, ChevronRight, ChevronsLeft, 
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { packageHasCategory } from '@/lib/packages/category-utils';
+import { humanizeExcursionType } from '@/lib/packages/package-types';
 
 interface PaquetesClientProps {
   paquetes: Paquete[];
   categorias: Categoria[];
 }
-
-const TIPO_LABELS: Record<string, string> = {
-  individual: 'Individual',
-  grupal: 'Grupal',
-  'a-medida': 'A Medida',
-  internacional: 'Internacional',
-  educativo: 'Educativo',
-  eventos: 'Eventos',
-  recitales: 'Recitales',
-};
 
 const TRANSPORTE_OPTIONS = [
   { value: 'bus', label: 'Bus' },
@@ -225,7 +216,14 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
   const destinos = destinationOptions;
 
   const tiposUnicos = useMemo(() => {
-    const unique = Array.from(new Set(paquetes.map((p) => p.tipo).filter(Boolean)));
+    const unique = Array.from(
+      new Set(
+        paquetes
+          .flatMap((p) => (Array.isArray(p.tipos) && p.tipos.length > 0 ? p.tipos : [p.tipo]))
+          .map((tipo) => String(tipo || '').trim())
+          .filter(Boolean)
+      )
+    );
     return unique.sort((a, b) => a.localeCompare(b));
   }, [paquetes]);
 
@@ -287,7 +285,13 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
 
       // 4. Tipo
       if (selectedTipos.length > 0) {
-        if (!selectedTipos.includes(paquete.tipo)) return false;
+        const packageTypes = new Set(
+          (Array.isArray(paquete.tipos) && paquete.tipos.length > 0 ? paquete.tipos : [paquete.tipo])
+            .map((tipo) => String(tipo || '').trim())
+            .filter(Boolean)
+        );
+        const hasAnySelectedType = selectedTipos.some((tipo) => packageTypes.has(tipo));
+        if (!hasAnySelectedType) return false;
       }
 
       // 5. Con transporte
@@ -462,7 +466,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                             onCheckedChange={() => toggleTipo(tipo)}
                             className="border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
                           />
-                          <span className="text-sm text-gray-700 group-hover:text-black">{TIPO_LABELS[tipo] ?? tipo}</span>
+                          <span className="text-sm text-gray-700 group-hover:text-black">{humanizeExcursionType(tipo) || tipo}</span>
                         </label>
                       ))}
                     </div>

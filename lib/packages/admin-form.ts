@@ -2,6 +2,8 @@ import * as z from 'zod';
 import type { Categoria, Salida } from '@/types';
 import { normalizePackageCategoryIds } from '@/lib/packages/category-utils';
 import { extractGoogleMapsEmbedUrl } from '@/lib/packages/google-maps';
+import { normalizeExcursionTypeValue, normalizePackageTypes } from '@/lib/packages/package-types';
+import { normalizePeopleCategories } from '@/lib/packages/people-categories';
 import {
   extractPlainTextFromRichText,
   hasMeaningfulRichText,
@@ -10,18 +12,7 @@ import {
 import { sanitizePackageRichHtml } from '@/lib/packages/rich-text-sanitize';
 
 export { normalizePackageCategoryIds } from '@/lib/packages/category-utils';
-
-export const TIPO_OPTIONS = [
-  { value: 'individual', label: 'Individual' },
-  { value: 'grupal', label: 'Grupal' },
-  { value: 'a-medida', label: 'A Medida' },
-  { value: 'internacional', label: 'Internacional' },
-  { value: 'educativo', label: 'Educativo' },
-  { value: 'eventos', label: 'Eventos' },
-  { value: 'recitales', label: 'Recitales' },
-] as const;
-
-const VALID_PACKAGE_TYPES = new Set(TIPO_OPTIONS.map((option) => option.value));
+export { normalizePackageTypes } from '@/lib/packages/package-types';
 
 export const TRANSPORTE_OPTIONS = [
   { value: 'bus', label: 'Bus' },
@@ -63,6 +54,23 @@ const itineraryStepSchema = z.object({
     .transform((val) => normalizeRichTextContent(val)),
 });
 
+const peopleCategorySchema = z
+  .object({
+    key: z
+      .string()
+      .min(1, 'Falta el identificador de la categoria')
+      .max(32, 'El identificador es demasiado largo')
+      .transform((val) => String(val ?? '').trim()),
+    label: z
+      .string()
+      .min(1, 'Falta el nombre de la categoria')
+      .max(60, 'El nombre es demasiado largo')
+      .transform((val) => String(val ?? '').trim()),
+    min: z.number().int('Debes ingresar un numero entero').min(0, 'Minimo 0').max(50, 'Maximo 50'),
+    max: z.number().int('Debes ingresar un numero entero').min(0, 'Minimo 0').max(50, 'Maximo 50'),
+  })
+  .refine((data) => data.max >= data.min, { message: 'El máximo no puede ser menor al mínimo', path: ['max'] });
+
 export const packageAdminFormSchema = z.object({
   titulo: z.string().min(5, 'El titulo debe tener al menos 5 caracteres').max(100, 'El titulo no puede exceder 100 caracteres').transform((val) => val.trim()),
   descripcion: z.string().max(50000, 'La descripcion es demasiado larga').transform((val) => normalizeRichTextContent(val)),
@@ -76,7 +84,10 @@ export const packageAdminFormSchema = z.object({
     .or(z.literal(''))
     .transform((val) => extractGoogleMapsEmbedUrl(val ?? '')),
   categoriaIds: z.array(z.string()).min(1, 'Debes seleccionar al menos una categoria'),
-  tipos: z.array(z.enum(['individual', 'grupal', 'a-medida', 'internacional', 'educativo', 'eventos', 'recitales'])).min(1, 'Debes seleccionar al menos un tipo'),
+  tipos: z
+    .array(z.string().transform((val) => normalizeExcursionTypeValue(val)))
+    .min(1, 'Debes seleccionar al menos un tipo')
+    .transform((values) => normalizePackageTypes(values)),
   precio: z.number().min(0, 'El precio debe ser mayor o igual a 0').max(999999999, 'El precio es demasiado alto').transform((val) => Number(val) || 0),
   tarifaEspecialHabilitada: z.boolean().transform((val) => Boolean(val)),
   tarifaEspecialPrecio: z.number().min(0, 'La tarifa especial debe ser mayor o igual a 0').max(999999999, 'La tarifa especial es demasiado alta').transform((val) => Number(val) || 0),
@@ -86,6 +97,7 @@ export const packageAdminFormSchema = z.object({
   duracion: z.string().min(1, 'La duracion es requerida').max(50, 'La duracion no puede exceder 50 caracteres').transform((val) => val.trim()),
   reservasHabilitadas: z.boolean().transform((val) => Boolean(val)),
   maxPersonasPorReserva: z.number().int('Debes ingresar un numero entero').min(1, 'Minimo 1 persona').max(50, 'Maximo 50 personas'),
+  peopleCategories: z.array(peopleCategorySchema).max(10, 'Hay demasiadas categorias').optional().default([]),
   incluye: z.string().optional().default(''),
   visible: z.boolean().transform((val) => Boolean(val)),
   destacado: z.boolean().transform((val) => Boolean(val)),
@@ -149,6 +161,26 @@ export const packageAdminFormSchema = z.object({
       message: 'Debes indicar la fecha limite de la tarifa especial',
     });
   }
+
+  const categories = normalizePeopleCategories(data.peopleCategories, data.maxPersonasPorReserva);
+  if (categories.length > 0) {
+    const keys = categories.map((item) => item.key);
+    if (new Set(keys).size !== keys.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['peopleCategories'],
+        message: 'No se permiten categorias duplicadas',
+      });
+    }
+    const sumMin = categories.reduce((acc, item) => acc + Math.max(0, Number(item.min) || 0), 0);
+    if (sumMin > data.maxPersonasPorReserva) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['peopleCategories'],
+        message: 'La suma de mínimos supera el máximo por reserva',
+      });
+    }
+  }
 });
 
 export type PackageAdminFormData = z.infer<typeof packageAdminFormSchema>;
@@ -158,7 +190,7 @@ export const packageAdminDefaultValues: PackageAdminFormData = {
   destacado: true,
   ctaWhatsApp: true,
   mostrarDesde: true,
-  tipos: ['individual'],
+  tipos: [],
   categoriaIds: [],
   moneda: 'ARS',
   incluye: '',
@@ -172,6 +204,10 @@ export const packageAdminDefaultValues: PackageAdminFormData = {
   tarifaEspecialFechaLimite: '',
   reservasHabilitadas: true,
   maxPersonasPorReserva: 6,
+  peopleCategories: [
+    { key: 'adults', label: 'Adultos', min: 1, max: 6 },
+    { key: 'minors', label: 'Menores', min: 0, max: 6 },
+  ],
   titulo: '',
   descripcion: '',
   duracion: '',
@@ -191,13 +227,6 @@ export function dataURLtoFile(dataUrl: string, filename: string): File {
 
 export function hasValidPackageSalida(salidas: Salida[]): boolean {
   return salidas.some((salida) => Boolean(salida?.fecha?.trim()));
-}
-
-export function normalizePackageTypes(input: unknown): PackageAdminFormData['tipos'] {
-  const values = Array.isArray(input) ? input : typeof input === 'string' ? [input] : [];
-  return values.filter((value): value is PackageAdminFormData['tipos'][number] =>
-    typeof value === 'string' && VALID_PACKAGE_TYPES.has(value as PackageAdminFormData['tipos'][number])
-  );
 }
 
 export function getInvalidPackageSalidasSummary(salidas: Salida[]): {
@@ -246,8 +275,6 @@ export function sanitizePackageSalidas(salidas: Salida[]): Salida[] {
       ...(typeof (salida as any)?.cupo === 'number' && Number((salida as any).cupo) > 0
         ? { cupo: Math.max(0, Math.floor(Number((salida as any).cupo) || 0)) }
         : {}),
-      seatSelectionEnabled: Boolean((salida as any)?.seatSelectionEnabled),
-      seatLayoutId: String((salida as any)?.seatLayoutId ?? '').trim(),
     } as Salida;
   });
 }
@@ -319,6 +346,7 @@ export function buildPackageAdminPayload(args: {
   const primaryTipo = normalizedTipos[0];
   const sanitizedSalidas = sanitizePackageSalidas(salidas);
   const bookingCurrency = data.moneda === 'USD' ? 'usd' : 'ars';
+  const peopleCategories = normalizePeopleCategories(data.peopleCategories, data.maxPersonasPorReserva);
 
   const descripcionHtml = sanitizePackageRichHtml(data.descripcion);
   const itinerarioSteps = (data.itinerarioSteps ?? [])
@@ -374,13 +402,12 @@ export function buildPackageAdminPayload(args: {
       subtitle1: data.descripcionCorta?.trim() || '',
       subtitle2: data.duracion.trim(),
       hasSpecificDates: sanitizedSalidas.length > 0,
+      peopleCategories,
       dates: sanitizedSalidas.map((salida) => ({
         date: salida.fecha,
         capacity: Math.max(0, Number(salida.cupo ?? 0) || 0),
         enabled: true,
         price: Math.max(0, Number(salida.precio ?? 0) || 0),
-        seatSelectionEnabled: Boolean(salida.seatSelectionEnabled),
-        seatLayoutId: salida.seatLayoutId?.trim() || '',
       })),
       maxPeoplePerBooking: Math.max(1, Number(data.maxPersonasPorReserva) || 1),
       currency: bookingCurrency,

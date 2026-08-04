@@ -10,7 +10,7 @@ import WhatsAppButton from '@/components/WhatsAppButton';
 import type { Metadata } from 'next';
 import { serializeFirestoreData } from '@/lib/utils/serialize';
 import { SITE_NAME, SITE_URL } from '@/lib/constants';
-import { siteConfig } from '@/lib/siteConfig';
+import { buildPageTitle, siteConfig } from '@/lib/siteConfig';
 import { getPaquetesByCategoria } from '@/lib/paquetes';
 
 export const revalidate = 0;
@@ -64,7 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!firebaseEnabled) {
     const url = `${SITE_URL}/destinos/${slug}`;
     return {
-      title: `${slug} - ${SITE_NAME}`,
+      title: buildPageTitle(slug),
       description: `Destino ${slug} en ${SITE_NAME}.`,
       alternates: { canonical: url },
     };
@@ -80,7 +80,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const url = `${SITE_URL}/destinos/${slug}`;
 
   return {
-    title: `${destino.nombre} - ${SITE_NAME}`,
+    title: buildPageTitle(destino.nombre),
     description:
       destino.descripcion ||
       `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,
@@ -90,7 +90,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     openGraph: {
       type: 'website',
       url,
-      title: `${destino.nombre} - ${SITE_NAME}`,
+      title: buildPageTitle(destino.nombre),
       description:
         destino.descripcion ||
         `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,
@@ -109,7 +109,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${destino.nombre} - ${SITE_NAME}`,
+      title: buildPageTitle(destino.nombre),
       description:
         destino.descripcion ||
         `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,

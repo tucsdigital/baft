@@ -1,21 +1,21 @@
 {
   "branding": {
-    "name": "Baft"
+    "name": "BAFT"
   },
   "palette": {
     "primary": "#1F341C",
     "secondary": "#020202"
   },
   "logo": {
-    "url": "/images/logo_baft.png"
+    "url": "/images/logo.png"
   },
   "seo": {
-    "title": "Baft",
-    "description": "Baft es mas que agencia de turismo, funciona también como un centro de informes funcional a cada visitante, un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
-    "image": "/images/logo_baft.png"
+    "title": "BAFT",
+    "description": "BAFT es más que una agencia de turismo: funciona también como un centro de informes para cada visitante y un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
+    "image": "/images/logo.png"
   },
   "hero": {
-    "title": "Baft",
+    "title": "BAFT",
     "image": "/images/banner.jpg"
   },
   "contacto": {
@@ -41,7 +41,7 @@
   "content": {
     "about": {
       "paragraphs": [
-        "Baft es mas que agencia de turismo, funciona también como un centro de informes funcional a cada visitante, un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
+        "BAFT es más que una agencia de turismo: funciona también como un centro de informes para cada visitante y un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
         "Estamos conformada por jóvenes profesionales del turismo, quienes entendemos que el visitante no es sólo un “Turista” sino una persona interesada en conocer el lugar en donde vivimos, Patagonia, Argentina y Chilena.",
         "Partiendo de este concepto, brindamos al viajero un abanico de posibilidades según cada perfil, posibilidades económicas y disponibilidad horaria les sugerimos las mejores opciones."
       ]

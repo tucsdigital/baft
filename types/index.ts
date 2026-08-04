@@ -101,6 +101,12 @@ export interface PaqueteBookingConfig {
   subtitle1: string;
   subtitle2: string;
   hasSpecificDates: boolean;
+  peopleCategories?: Array<{
+    key: string;
+    label: string;
+    min: number;
+    max: number;
+  }>;
   dates?: Array<{
     date: string;
     capacity: number;
@@ -153,8 +159,8 @@ export interface Paquete {
   destino?: string;
   categoriaId?: string;
   categoriaIds?: string[];
-  tipo: 'individual' | 'grupal' | 'a-medida' | 'internacional' | 'educativo' | 'eventos' | 'recitales';
-  tipos?: Array<'individual' | 'grupal' | 'a-medida' | 'internacional' | 'educativo' | 'eventos' | 'recitales'>;
+  tipo: string;
+  tipos?: string[];
   precio: number;
   gastosAdministrativos?: number;
   precioDescuentoPrimerosCupos?: number;

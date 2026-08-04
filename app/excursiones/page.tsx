@@ -8,13 +8,13 @@ import PaquetesClient from '@/components/PaquetesClient';
 import type { Metadata } from 'next';
 import { serializeFirestoreData } from '@/lib/utils/serialize';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/constants';
-import { siteConfig } from '@/lib/siteConfig';
+import { buildPageTitle, siteConfig } from '@/lib/siteConfig';
 import { syncPackageCategoryData } from '@/lib/packages/category-utils';
 
 const siteUrl = SITE_URL;
 
 export const metadata: Metadata = {
-  title: `Excursiones - ${SITE_NAME}`,
+  title: buildPageTitle('Excursiones'),
   description: `Explorá nuestras excursiones con ${SITE_NAME}. ${SITE_DESCRIPTION}`,
   alternates: {
     canonical: `${siteUrl}/excursiones`,
@@ -22,14 +22,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: `${siteUrl}/excursiones`,
-    title: `Excursiones - ${SITE_NAME}`,
+    title: buildPageTitle('Excursiones'),
     description: `Explorá nuestras excursiones con ${SITE_NAME}.`,
     siteName: SITE_NAME,
     locale: siteConfig.seo.locale,
   },
   twitter: {
     card: 'summary_large_image',
-    title: `Excursiones - ${SITE_NAME}`,
+    title: buildPageTitle('Excursiones'),
     description: `Explorá nuestras excursiones con ${SITE_NAME}.`,
   },
   keywords: [...siteConfig.seo.keywords, 'excursiones', 'salidas', 'viajes'],

@@ -15,7 +15,7 @@ import { revalidateFrontPaths } from '@/lib/revalidate';
 import type { Categoria } from '@/types';
 import PackageForm from '@/components/admin/PackageForm';
 import { usePackageEditorState } from '@/components/admin/usePackageEditorState';
-import { countFeaturedPackages, fetchActiveCategorias } from '@/lib/packages/admin-queries';
+import { countFeaturedPackages, createExcursionType, fetchActiveCategorias, subscribeExcursionTypes } from '@/lib/packages/admin-queries';
 import {
   collectFormErrorMessages,
   countFormErrors,
@@ -31,12 +31,14 @@ import {
   packageAdminFormSchema,
   type PackageAdminFormData,
 } from '@/lib/packages/admin-form';
+import type { ExcursionTypeOption } from '@/lib/packages/package-types';
 
 export default function NuevoPaquetePage() {
   const [loading, setLoading] = useState(false);
   const [submitState, setSubmitState] = useState<'idle' | 'validating' | 'saving' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [excursionTypes, setExcursionTypes] = useState<ExcursionTypeOption[]>([]);
   const [destacadosCount, setDestacadosCount] = useState(0);
   const [selectedDestacadoPosition, setSelectedDestacadoPosition] = useState<number | null>(null);
   const router = useRouter();
@@ -59,7 +61,10 @@ export default function NuevoPaquetePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [categoriasData, destacados] = await Promise.all([fetchActiveCategorias(), countFeaturedPackages()]);
+        const [categoriasData, destacados] = await Promise.all([
+          fetchActiveCategorias(),
+          countFeaturedPackages(),
+        ]);
         setCategorias(categoriasData);
         setDestacadosCount(destacados);
       } catch (error) {
@@ -70,6 +75,23 @@ export default function NuevoPaquetePage() {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeExcursionTypes(
+      (items) => setExcursionTypes(items),
+      (error) => {
+        console.error('Error syncing excursion types:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCreateExcursionType = async (label: string) => {
+    const created = await createExcursionType(label);
+    toast.success('Tipo creado correctamente');
+    return created;
+  };
 
   const onSubmit = async (data: PackageAdminFormData) => {
     setSubmitState('saving');
@@ -241,6 +263,8 @@ export default function NuevoPaquetePage() {
             <PackageForm
               mode="create"
               categorias={categorias}
+              excursionTypes={excursionTypes}
+              onCreateExcursionType={handleCreateExcursionType}
               register={register}
               control={control}
               watch={watch}

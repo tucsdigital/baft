@@ -38,7 +38,7 @@ export default function AboutSection({
   };
 
   return (
-    <section className="relative py-16 md:py-24 bg-[#F9FAFB] overflow-hidden">
+    <section id="nosotros" className="relative py-16 md:py-24 bg-[#F9FAFB] overflow-hidden">
       {/* Background Orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] right-[10%] w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] opacity-60" />

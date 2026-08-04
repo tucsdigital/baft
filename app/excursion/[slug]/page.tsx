@@ -23,6 +23,7 @@ import { getPrimaryPackageCategoryId } from '@/lib/packages/category-utils';
 import { getAvailableForPackageDate } from '@/lib/cart/server';
 import { sanitizePackageRichHtml } from '@/lib/packages/rich-text-sanitize';
 import { extractPlainTextFromRichText } from '@/lib/packages/rich-text-validation';
+import { buildPageTitle } from '@/lib/siteConfig';
 
 /** Sin caché: los cambios del admin se ven de inmesdiato */
 export const revalidate = 0;
@@ -61,12 +62,12 @@ async function getPaquete(slug: string): Promise<Paquete | null> {
     const itinerarioHtml = sanitizePackageRichHtml(paquete.itinerario);
     const itinerarioSteps = Array.isArray((paquete as any).itinerarioSteps)
       ? (paquete as any).itinerarioSteps
-          .map((step: any) => ({
-            id: String(step?.id ?? '').trim(),
-            titulo: String(step?.titulo ?? '').trim(),
-            descripcion: sanitizePackageRichHtml(step?.descripcion),
-          }))
-          .filter((step: any) => Boolean(step.id) && (Boolean(step.titulo) || Boolean(step.descripcion)))
+        .map((step: any) => ({
+          id: String(step?.id ?? '').trim(),
+          titulo: String(step?.titulo ?? '').trim(),
+          descripcion: sanitizePackageRichHtml(step?.descripcion),
+        }))
+        .filter((step: any) => Boolean(step.id) && (Boolean(step.titulo) || Boolean(step.descripcion)))
       : [];
 
     return {
@@ -109,7 +110,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     const siteUrl = SITE_URL;
     const url = `${siteUrl}/excursion/${slug}`;
     return {
-      title: `${slug} - ${SITE_NAME}`,
+      title: buildPageTitle(slug),
       description: `Excursión ${slug} en ${SITE_NAME}.`,
       alternates: { canonical: url },
     };
@@ -132,7 +133,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const coverImage = paquete.imagenPortada || paquete.imagenTarjeta || paquete.imagenPrincipal;
 
   return {
-    title: `${paquete.titulo} - ${SITE_NAME}`,
+    title: buildPageTitle(paquete.titulo),
     description: cleanDescription,
     alternates: {
       canonical: url,
@@ -140,24 +141,24 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     openGraph: {
       type: 'website',
       url,
-      title: `${paquete.titulo} - ${SITE_NAME}`,
+      title: buildPageTitle(paquete.titulo),
       description: cleanDescription,
       siteName: SITE_NAME,
       locale: 'es_AR',
       images: coverImage
         ? [
-            {
-              url: coverImage,
-              width: 1200,
-              height: 630,
-              alt: paquete.titulo,
-            },
-          ]
+          {
+            url: coverImage,
+            width: 1200,
+            height: 630,
+            alt: paquete.titulo,
+          },
+        ]
         : [],
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${paquete.titulo} - ${SITE_NAME}`,
+      title: buildPageTitle(paquete.titulo),
       description: cleanDescription,
       images: coverImage ? [coverImage] : [],
     },
@@ -196,13 +197,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
 
   const destinoCategoria = await getPrimaryDestino(paquete);
 
-  const images = Array.from(
-    new Set(
-      [paquete.imagenPortada, paquete.imagenPrincipal, ...(paquete.galeria ?? [])]
-        .map((s) => String(s || '').trim())
-        .filter(Boolean)
-    )
-  );
+  const images = Array.from(new Set((paquete.galeria ?? []).map((s) => String(s || '').trim()).filter(Boolean)));
   const short = (paquete.descripcionCorta || '').trim();
   const destino = paquete.destino || paquete.eventoLugar || 'Argentina';
   const locationText = paquete.eventoLugar || paquete.destino || destino;
@@ -252,29 +247,28 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
         <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="space-y-5">
             <div className="rounded-3xl border border-[#D4E6F7] bg-white p-6 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_280px]">
-                <div>
-                  <h1 className="text-[34px] font-extrabold leading-[1.05] tracking-[-0.02em] text-[#0B2240]">
-                    {paquete.titulo}
-                  </h1>
-                  <p className="mt-2 text-sm text-[#537190]">
-                    {short || 'Naturaleza imponente, aventura y confort en una experiencia única.'}
-                  </p>
-                  <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[#2A4E74]">
-                    <MapPin className="h-4 w-4 text-[#2BB8BF]" />
-                    {locationText}
-                  </div>
-                  {longDescriptionHtml ? (
-                    <div
-                      className="prose prose-sm mt-4 max-w-none text-[#415F7E] prose-headings:text-[#0B2240] prose-strong:text-[#17395E] md:prose-base"
-                      dangerouslySetInnerHTML={{ __html: longDescriptionHtml }}
-                    />
-                  ) : (
-                    <p className="mt-4 text-sm leading-relaxed text-[#415F7E]">
-                      Descubrí paisajes inolvidables y experiencias únicas con un programa premium que combina excursiones, alojamientos seleccionados y servicios exclusivos.
-                    </p>
-                  )}
+
+              <div>
+                <h1 className="text-[34px] font-extrabold leading-[1.05] tracking-[-0.02em] text-[#0B2240]">
+                  {paquete.titulo}
+                </h1>
+                <p className="mt-2 text-sm text-[#537190]">
+                  {short || 'Naturaleza imponente, aventura y confort en una experiencia única.'}
+                </p>
+                <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[#2A4E74]">
+                  <MapPin className="h-4 w-4 text-[#2BB8BF]" />
+                  {locationText}
                 </div>
+                {longDescriptionHtml ? (
+                  <div
+                    className="prose prose-sm mt-4 max-w-none text-[#415F7E] prose-headings:text-[#0B2240] prose-strong:text-[#17395E] md:prose-base"
+                    dangerouslySetInnerHTML={{ __html: longDescriptionHtml }}
+                  />
+                ) : (
+                  <p className="mt-4 text-sm leading-relaxed text-[#415F7E]">
+                    Descubrí paisajes inolvidables y experiencias únicas con un programa premium que combina excursiones, alojamientos seleccionados y servicios exclusivos.
+                  </p>
+                )}
               </div>
 
               {images.length > 1 ? (

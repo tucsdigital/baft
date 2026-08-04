@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Clock, Instagram, Mail, MapPin, Phone, Radio } from "lucide-react";
 import { FaFacebook, FaInstagram } from "react-icons/fa";
 import { CONTACT_INFO, LEGAL_INFO, SITE_NAME, SOCIAL_MEDIA } from "@/lib/constants";
-import { getBrandLogoSrc, isRemoteUrl, renderTemplate, siteConfig } from "@/lib/siteConfig";
+import { isRemoteUrl, renderTemplate, siteConfig } from "@/lib/siteConfig";
 
 const ThreadsIcon = ({ className }: { className?: string }) => (
   <svg
@@ -21,7 +21,7 @@ const ThreadsIcon = ({ className }: { className?: string }) => (
 );
 
 export default function HomeFooter() {
-  const logoSrc = getBrandLogoSrc();
+  const logoSrc = "/images/logo_white.png";
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || "{{siteName}} Logo");
   const telefonos = [CONTACT_INFO.telefono, CONTACT_INFO.telefonoSecundario].filter(Boolean).join(" / ");
   const developer = siteConfig.company.developerCredits;
