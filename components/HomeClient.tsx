@@ -123,7 +123,7 @@ export default function HomeClient({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white">
-      <Navbar variant="homeMockup" reserveSpace />
+      <Navbar variant="homeMockup" reserveSpace floating />
 
       <motion.div
         initial="hidden"

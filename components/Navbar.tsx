@@ -13,6 +13,7 @@ interface NavbarProps {
   transparent?: boolean;
   forceTransparent?: boolean;
   reserveSpace?: boolean;
+  floating?: boolean;
   theme?: 'default' | 'rio';
   variant?: 'default' | 'homeMockup';
 }
@@ -37,7 +38,13 @@ function getDestinoSubtitle(item: DestinoNavItem): string {
   return desc || 'Ver destino';
 }
 
-export default function Navbar({ transparent = false, forceTransparent = false, reserveSpace = false, variant = 'default' }: NavbarProps) {
+export default function Navbar({
+  transparent = false,
+  forceTransparent = false,
+  reserveSpace = false,
+  floating = false,
+  variant = 'default',
+}: NavbarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [destinosOpen, setDestinosOpen] = useState(false);
@@ -47,7 +54,7 @@ export default function Navbar({ transparent = false, forceTransparent = false, 
 
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || '{{siteName}} Logo');
   const whatsAppHref = getWhatsAppLink();
-  const isFloatingVariant = variant === 'homeMockup';
+  const isFloatingVariant = floating;
 
   const navRef = useRef<HTMLElement | null>(null);
   const [navHeight, setNavHeight] = useState(0);
@@ -130,7 +137,7 @@ export default function Navbar({ transparent = false, forceTransparent = false, 
 
   const destinosItems = useMemo(() => destinos.filter((d) => Boolean(d?.slug)).slice(0, 6), [destinos]);
 
-  const isTransparent = forceTransparent || ((transparent || isFloatingVariant) && !isScrolled);
+  const isTransparent = forceTransparent || ((transparent || floating) && !isScrolled);
   const logoSrc = '/images/logo_white.png';
   const logoToneClass = isTransparent ? '' : 'invert';
   const shellClasses = isTransparent
@@ -487,7 +494,7 @@ export default function Navbar({ transparent = false, forceTransparent = false, 
 
   return (
     <>
-      {reserveSpace && !isFloatingVariant ? <div aria-hidden className="w-full" style={{ height: navHeight }} /> : null}
+      {reserveSpace && !isFloatingVariant ? <div aria-hidden className="w-full" style={{ height: navHeight || 112 }} /> : null}
       {mounted && typeof document !== 'undefined' ? createPortal(navContent, document.body) : navContent}
     </>
   );
