@@ -9,6 +9,11 @@ type DuplicatePaqueteResult = {
   paquete: Paquete;
 };
 
+function deepClone<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function stripCopySuffix(title: string): string {
   return title.replace(/\s+\(copia(?:\s+\d+)?\)$/i, '').trim();
 }
@@ -90,21 +95,41 @@ async function cloneAssetMap(paquete: Paquete): Promise<Map<string, UploadResult
 }
 
 function cloneSalidas(salidas: Salida[] = []): Salida[] {
-  return salidas.map((salida) => ({
-    ...salida,
-  }));
+  return deepClone(salidas);
 }
 
 function cloneTickets(tickets: TicketPack[] = []): TicketPack[] {
-  return tickets.map((ticket) => ({
-    ...ticket,
-  }));
+  return deepClone(tickets);
 }
 
 function cloneCondiciones(condiciones: PaqueteCondicion[] = []): PaqueteCondicion[] {
-  return condiciones.map((condicion) => ({
-    ...condicion,
-  }));
+  return deepClone(condiciones);
+}
+
+type PackageDocumentInput = Partial<Omit<Paquete, 'id'>> & {
+  titulo: Paquete['titulo'];
+  slug: Paquete['slug'];
+  tipo: Paquete['tipo'];
+  precio: Paquete['precio'];
+  moneda: Paquete['moneda'];
+  mostrarDesde: Paquete['mostrarDesde'];
+  duracion: Paquete['duracion'];
+  incluye: Paquete['incluye'];
+  noIncluye: Paquete['noIncluye'];
+  salidas: Paquete['salidas'];
+  imagenPrincipal: Paquete['imagenPrincipal'];
+  galeria: Paquete['galeria'];
+  visible: Paquete['visible'];
+  destacado: Paquete['destacado'];
+  fechaCreacion: Paquete['fechaCreacion'];
+  orden: Paquete['orden'];
+  ctaWhatsApp: Paquete['ctaWhatsApp'];
+};
+
+function removeUndefinedFields(input: PackageDocumentInput): PackageDocumentInput {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined)
+  ) as PackageDocumentInput;
 }
 
 export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqueteResult> {
@@ -130,8 +155,19 @@ export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqu
     new Set([...(original.tipos || []), ...(original.tipo ? [original.tipo] : [])].filter(Boolean))
   );
 
-  const duplicatedData: Omit<Paquete, 'id'> = {
-    ...original,
+  const clonedFaqs = Array.isArray(original.faqs) ? deepClone(original.faqs) : original.faqs;
+  const clonedTestimonios = Array.isArray(original.testimonios) ? deepClone(original.testimonios) : original.testimonios;
+  const clonedItinerarioSteps = Array.isArray(original.itinerarioSteps) ? deepClone(original.itinerarioSteps) : original.itinerarioSteps;
+  const clonedBookingConfig = original.bookingConfig ? deepClone(original.bookingConfig) : original.bookingConfig;
+  const clonedReservationPricing = original.reservationPricing ? deepClone(original.reservationPricing) : original.reservationPricing;
+  const clonedPickupPointsConfig = Array.isArray(original.pickupPointsConfig) ? deepClone(original.pickupPointsConfig) : original.pickupPointsConfig;
+  const clonedTarjetaKey = original.imagenTarjeta ? clonedAssets.get(original.imagenTarjeta)?.key ?? original.imagenTarjetaKey : original.imagenTarjetaKey;
+  const clonedPortadaKey = original.imagenPortada ? clonedAssets.get(original.imagenPortada)?.key ?? original.imagenPortadaKey : original.imagenPortadaKey;
+  const clonedPortadaMobileKey = original.imagenPortadaMobile ? clonedAssets.get(original.imagenPortadaMobile)?.key ?? original.imagenPortadaMobileKey : original.imagenPortadaMobileKey;
+  const clonedPortadaDesktopKey = original.imagenPortadaDesktop ? clonedAssets.get(original.imagenPortadaDesktop)?.key ?? original.imagenPortadaDesktopKey : original.imagenPortadaDesktopKey;
+
+  const duplicatedData: PackageDocumentInput = {
+    ...deepClone(original),
     titulo: uniqueTitle,
     slug: uniqueSlug,
     orden: maxOrder + 1,
@@ -143,17 +179,13 @@ export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqu
     tipos: [...baseTipos],
     tiposTransporte: [...(original.tiposTransporte || [])],
     tags: [...(original.tags || [])],
-    faqs: Array.isArray(original.faqs) ? original.faqs.map((item) => ({ ...item })) : original.faqs,
-    testimonios: Array.isArray(original.testimonios) ? original.testimonios.map((item) => ({ ...item })) : original.testimonios,
-    itinerarioSteps: Array.isArray(original.itinerarioSteps) ? original.itinerarioSteps.map((item) => ({ ...item })) : original.itinerarioSteps,
-    bookingConfig: original.bookingConfig ? (JSON.parse(JSON.stringify(original.bookingConfig)) as Paquete['bookingConfig']) : original.bookingConfig,
-    reservationPricing: original.reservationPricing
-      ? (JSON.parse(JSON.stringify(original.reservationPricing)) as Paquete['reservationPricing'])
-      : original.reservationPricing,
+    faqs: clonedFaqs,
+    testimonios: clonedTestimonios,
+    itinerarioSteps: clonedItinerarioSteps,
+    bookingConfig: clonedBookingConfig,
+    reservationPricing: clonedReservationPricing,
     pickupPoints: [...(original.pickupPoints || [])],
-    pickupPointsConfig: Array.isArray(original.pickupPointsConfig)
-      ? original.pickupPointsConfig.map((item) => ({ ...item }))
-      : original.pickupPointsConfig,
+    pickupPointsConfig: clonedPickupPointsConfig,
     galeria: (original.galeria || []).map((url) => clonedAssets.get(url)?.url || url),
     galeriaKeys: (original.galeria || []).map(
       (url, idx) => clonedAssets.get(url)?.key || original.galeriaKeys?.[idx] || ''
@@ -171,33 +203,26 @@ export async function duplicatePaquete(paqueteId: string): Promise<DuplicatePaqu
       ? clonedAssets.get(original.imagenPrincipal)?.key || original.imagenPrincipalKey || ''
       : '',
     imagenTarjeta: original.imagenTarjeta ? clonedAssets.get(original.imagenTarjeta)?.url || original.imagenTarjeta : '',
-    imagenTarjetaKey: original.imagenTarjeta
-      ? clonedAssets.get(original.imagenTarjeta)?.key || original.imagenTarjetaKey || ''
-      : '',
+    imagenTarjetaKey: clonedTarjetaKey,
     imagenPortada: original.imagenPortada ? clonedAssets.get(original.imagenPortada)?.url || original.imagenPortada : '',
-    imagenPortadaKey: original.imagenPortada
-      ? clonedAssets.get(original.imagenPortada)?.key || original.imagenPortadaKey || ''
-      : '',
+    imagenPortadaKey: clonedPortadaKey,
     imagenPortadaMobile: original.imagenPortadaMobile
       ? clonedAssets.get(original.imagenPortadaMobile)?.url || original.imagenPortadaMobile
       : '',
-    imagenPortadaMobileKey: original.imagenPortadaMobile
-      ? clonedAssets.get(original.imagenPortadaMobile)?.key || original.imagenPortadaMobileKey || ''
-      : '',
+    imagenPortadaMobileKey: clonedPortadaMobileKey,
     imagenPortadaDesktop: original.imagenPortadaDesktop
       ? clonedAssets.get(original.imagenPortadaDesktop)?.url || original.imagenPortadaDesktop
       : '',
-    imagenPortadaDesktopKey: original.imagenPortadaDesktop
-      ? clonedAssets.get(original.imagenPortadaDesktop)?.key || original.imagenPortadaDesktopKey || ''
-      : '',
+    imagenPortadaDesktopKey: clonedPortadaDesktopKey,
   };
 
-  const createdDoc = await addDoc(collection(db, 'paquetes'), duplicatedData);
+  const sanitizedDuplicatedData = removeUndefinedFields(duplicatedData) as Omit<Paquete, 'id'>;
+  const createdDoc = await addDoc(collection(db, 'paquetes'), sanitizedDuplicatedData);
 
   return {
     id: createdDoc.id,
     paquete: {
-      ...duplicatedData,
+      ...sanitizedDuplicatedData,
       id: createdDoc.id,
     },
   };
