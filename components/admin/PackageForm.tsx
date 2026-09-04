@@ -716,10 +716,10 @@ export default function PackageForm(props: Props) {
           </CardContent>
         </Card>
 
-        <Card id="salidas-section">
+       <Card id="salidas-section">
           <CardHeader className="pb-4">
             <CardTitle>Fechas y Salidas</CardTitle>
-            <p className="text-base text-gray-600 mt-1">Carga salidas solo si esta excursion las necesita</p>
+            <p className="text-base text-gray-600 mt-1">Carga salidas solo si esta experiencia las necesita</p>
           </CardHeader>
           <CardContent>
             <SalidasManager salidas={salidas} onSalidasChange={onSalidasChange} />
