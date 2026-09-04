@@ -9,6 +9,7 @@ import {
   normalizePeopleCategories,
   type PeopleBreakdown,
 } from '@/lib/packages/people-categories';
+import { computeReservationPricing, getAdministrativeFeeExtraSelection } from '@/lib/packages/resolve-departure';
 
 /** Sin caché: datos de experiencia y reserva siempre actualizados */
 export const revalidate = 0;
@@ -38,6 +39,7 @@ export default async function CheckoutPage({
     slug: paquete.slug,
     title: paquete.titulo,
     subtitle: paquete.subtitulo ?? '',
+    price: paquete.precio,
     cardImage: paquete.imagenCard ?? '',
     images: paquete.imagenes ?? [],
     maxPeople: paquete.bookingConfig?.maxPeoplePerBooking ?? paquete.capacidadMaxima ?? 10,
@@ -120,5 +122,30 @@ export default async function CheckoutPage({
     pax = normalizePeopleBreakdown({ breakdown: null, categories: categoriesForCheckout });
   }
 
-  return <CheckoutClient experience={experience as any} date={date} people={safePeople} pax={pax} initialError={checkoutError} />;
+  const administrativeFeeExtra = getAdministrativeFeeExtraSelection(paquete);
+  const computedPricing = computeReservationPricing(paquete, date, {
+    people: safePeople,
+    peopleAdults: typeof pax.adults === 'number' ? pax.adults : null,
+    peopleMinors: typeof pax.minors === 'number' ? pax.minors : null,
+    selectedExtras: administrativeFeeExtra ? [administrativeFeeExtra] : null,
+  });
+  const pricing = {
+    unitAmountAdults: computedPricing.unitAmountAdults,
+    unitAmountMinors: computedPricing.unitAmountMinors,
+    baseSubtotalAmount: computedPricing.baseSubtotalAmount,
+    extrasTotalAmount: computedPricing.extrasTotalAmount,
+    subtotalAmount: computedPricing.subtotalAmount,
+    currency: computedPricing.currency ?? 'ars',
+  };
+
+  return (
+    <CheckoutClient
+      experience={experience as any}
+      date={date}
+      people={safePeople}
+      pax={pax}
+      pricing={pricing}
+      initialError={checkoutError}
+    />
+  );
 }
