@@ -20,7 +20,6 @@ import {
   normalizeDigits,
   normalizeEmail,
   prepareNextReservationCodeInTransaction,
-  reserveNextReservationCodeInTransaction,
 } from '@/lib/reservas/code';
 import { buildDefaultEmailDelivery, buildQueuedEmailDelivery } from '@/lib/sales/status';
 import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
@@ -1243,13 +1242,54 @@ export async function POST(request: Request) {
       const emailAdminRef = doc(db, 'emailJobs', `mp_${reservationId}_admin`);
 
       const txResult = await runTransaction(db, async (tx) => {
+        // ============================================
+        // FASE 1: TODAS LAS LECTURAS
+        // ============================================
         const reservaSnap = await tx.get(reservaRef);
         const stockSnap = await tx.get(stockRef);
         const emailClienteConfirmSnap = await tx.get(emailClienteConfirmRef);
         const emailClienteVoucherSnap = await tx.get(emailClienteVoucherRef);
         const emailAdminSnap = await tx.get(emailAdminRef);
+
+        // Lectura del contador de reservas
+        const counterRef = doc(collection(db, 'systemCounters'), 'reservations');
+        const counterSnap = await tx.get(counterRef);
+
+        // Lectura de hold y lock (debe ser antes de todas las escrituras)
+        let holdSnap: any = null;
+        let lockSnap: any = null;
+        let lockRef: any = null;
+        let holdWasActive = false;
+        if (holdId && packageId && date && date !== 'sin-fecha') {
+          const holdRef = doc(db, 'reservationHolds', holdId);
+          holdSnap = await tx.get(holdRef);
+          if (holdSnap.exists()) {
+            const holdData: any = holdSnap.data();
+            holdWasActive = String(holdData?.status ?? '') === 'active';
+            if (holdWasActive && (isApproved || shouldReleaseHold)) {
+              lockRef = doc(db, 'stockHolds', `${packageId}_${date}`);
+              lockSnap = await tx.get(lockRef);
+            }
+          }
+        }
+
         const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, pickupPointTime: null, now });
         const shouldQueueVoucher = Boolean(date && date !== 'sin-fecha');
+
+        // Calcular código de reserva a partir de la lectura del contador
+        const currentCounter = counterSnap.exists() ? Math.max(0, Number((counterSnap.data() as any)?.lastNumber ?? 0) || 0) : 0;
+        const reservationCode = String(currentCounter + 1).padStart(6, '0');
+
+        // ============================================
+        // FASE 2: TODAS LAS ESCRITURAS
+        // ============================================
+
+        // Actualizar contador de reservas
+        if (counterSnap.exists()) {
+          tx.update(counterRef, { lastNumber: currentCounter + 1, updatedAt: now });
+        } else {
+          tx.set(counterRef, { lastNumber: currentCounter + 1, createdAt: now, updatedAt: now });
+        }
 
         if (!reservaSnap.exists()) {
           // Crear nueva reserva
@@ -1288,7 +1328,6 @@ export async function POST(request: Request) {
             }
           }
 
-          const reservationCode = await reserveNextReservationCodeInTransaction(tx);
           tx.set(reservaRef, {
             packageId,
             packageSlug,
@@ -1453,29 +1492,20 @@ export async function POST(request: Request) {
           });
         }
 
-        if (holdId && packageId && date && date !== 'sin-fecha') {
+        // Actualizar hold y lock
+        if (holdWasActive && (isApproved || shouldReleaseHold)) {
           const holdRef = doc(db, 'reservationHolds', holdId);
-          const holdSnap = await tx.get(holdRef);
-          if (holdSnap.exists()) {
-            const holdData: any = holdSnap.data();
-            const holdStatus = String(holdData?.status ?? '');
-            const holdWasActive = holdStatus === 'active';
-            if (holdWasActive && isApproved) {
-              tx.update(holdRef, { status: 'consumed', consumedAt: now, paymentId: String(paymentId), updatedAt: now });
-            } else if (holdWasActive && shouldReleaseHold) {
-              tx.update(holdRef, { status: 'released', releasedAt: now, paymentId: String(paymentId), updatedAt: now });
-            }
+          if (isApproved) {
+            tx.update(holdRef, { status: 'consumed', consumedAt: now, paymentId: String(paymentId), updatedAt: now });
+          } else if (shouldReleaseHold) {
+            tx.update(holdRef, { status: 'released', releasedAt: now, paymentId: String(paymentId), updatedAt: now });
+          }
 
-            if (holdWasActive && (isApproved || shouldReleaseHold)) {
-              const lockRef = doc(db, 'stockHolds', `${packageId}_${date}`);
-              const lockSnap = await tx.get(lockRef);
-              const heldPeople = lockSnap.exists() ? Number((lockSnap.data() as any)?.heldPeople ?? 0) : 0;
-              if (!lockSnap.exists()) {
-                tx.set(lockRef, { packageId, date, heldPeople: 0, createdAt: now, updatedAt: now });
-              } else {
-                tx.update(lockRef, { heldPeople: Math.max(0, Math.floor(heldPeople - people)), updatedAt: now });
-              }
-            }
+          if (lockSnap && lockSnap.exists()) {
+            const heldPeople = Number((lockSnap.data() as any)?.heldPeople ?? 0);
+            tx.update(lockRef, { heldPeople: Math.max(0, Math.floor(heldPeople - people)), updatedAt: now });
+          } else {
+            tx.set(lockRef, { packageId, date, heldPeople: 0, createdAt: now, updatedAt: now });
           }
         }
 
