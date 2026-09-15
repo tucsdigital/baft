@@ -141,7 +141,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[94vw] rounded-[18px] border border-white/18 bg-white/98 p-1 text-gray-800 shadow-[0_14px_36px_rgba(0,0,0,0.14)] md:max-w-4xl md:rounded-[28px] md:p-4"
+      className="relative mx-auto w-full max-w-[94vw] top-16 md:top-0 rounded-[18px] border border-white/18 bg-white/98 p-1 text-gray-800 shadow-[0_14px_36px_rgba(0,0,0,0.14)] md:max-w-4xl md:rounded-[28px] md:p-4"
       ref={containerRef}
     >
       <div className="flex flex-col gap-2 md:flex-row md:gap-3">

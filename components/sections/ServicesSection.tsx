@@ -92,14 +92,24 @@ export default function ServicesSection({
                       <h3 className="text-xl font-bold mb-4 text-gray-900">
                         {item.title}
                       </h3>
-                      <p className="text-gray-500 leading-relaxed font-light">
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                       <p className="text-gray-500 leading-relaxed font-light">
+                         {item.desc}
+                       </p>
+                       {item.cta && (
+                         <a
+                           href={item.cta.url}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="inline-flex items-center gap-1 mt-4 text-primary text-sm font-semibold hover:underline"
+                         >
+                           {item.cta.label}
+                         </a>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               );
+             })}
           </div>
           <div className="flex justify-center gap-2 mt-2">
             {services.map((_, i) => (
@@ -139,6 +149,16 @@ export default function ServicesSection({
                     <p className="text-gray-500 leading-relaxed font-light transition-colors duration-300 mb-2">
                       {item.desc}
                     </p>
+                    {item.cta && (
+                      <a
+                        href={item.cta.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-4 text-primary text-sm font-semibold hover:underline"
+                      >
+                        {item.cta.label}
+                      </a>
+                    )}
                   </div>
                 </div>
               </motion.div>

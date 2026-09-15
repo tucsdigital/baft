@@ -81,7 +81,7 @@ export type SiteConfig = {
       titlePrefix: string;
       titleAccent: string;
       subtitle: string;
-      items: Array<{ icon: string; title: string; desc: string }>;
+      items: Array<{ icon: string; title: string; desc: string; cta?: { label: string; url: string } }>;
     };
     values: {
       badge: string;
@@ -344,11 +344,19 @@ function mapSimpleSiteConfig(input: Record<string, any>): Partial<SiteConfig> {
         titleAccent: 'para cada viajero',
         subtitle: 'Te acompañamos a elegir la mejor forma de vivir Patagonia.',
         items: Array.isArray(input.content?.services?.items)
-          ? input.content.services.items.map((item: any, index: number) => ({
-              icon: serviceIcons[index % serviceIcons.length],
-              title: ensureString(item?.title, '', { allowEmpty: true }),
-              desc: ensureString(item?.description, '', { allowEmpty: true }),
-            }))
+          ? input.content.services.items.map((item: any, index: number) => {
+              const rawCta = item?.cta;
+              const cta =
+                isRecord(rawCta) && (rawCta.label || rawCta.url)
+                  ? { label: ensureString(rawCta.label, '', { allowEmpty: true }), url: ensureString(rawCta.url, '', { allowEmpty: true }) }
+                  : undefined;
+              return {
+                icon: serviceIcons[index % serviceIcons.length],
+                title: ensureString(item?.title, '', { allowEmpty: true }),
+                desc: ensureString(item?.description, '', { allowEmpty: true }),
+                cta,
+              };
+            })
           : [],
       },
       values: {
@@ -621,11 +629,19 @@ function normalizeSiteConfig(input: SiteConfig): SiteConfig {
         subtitle: ensureString(input.content?.services?.subtitle, DEFAULT_SITE_CONFIG.content.services.subtitle, { allowEmpty: true }),
         items: Array.isArray(input.content?.services?.items)
           ? input.content.services.items
-              .map((it: any) => ({
-                icon: ensureString(it?.icon, 'Users'),
-                title: ensureString(it?.title, '', { allowEmpty: true }),
-                desc: ensureString(it?.desc, '', { allowEmpty: true }),
-              }))
+              .map((it: any) => {
+                const rawCta = it?.cta;
+                const cta =
+                  isRecord(rawCta) && (rawCta.label || rawCta.url)
+                    ? { label: ensureString(rawCta.label, '', { allowEmpty: true }), url: ensureString(rawCta.url, '', { allowEmpty: true }) }
+                    : undefined;
+                return {
+                  icon: ensureString(it?.icon, 'Users'),
+                  title: ensureString(it?.title, '', { allowEmpty: true }),
+                  desc: ensureString(it?.desc, '', { allowEmpty: true }),
+                  cta,
+                };
+              })
               .filter((it: any) => it.title.trim().length > 0 || it.desc.trim().length > 0)
           : [],
       },

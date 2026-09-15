@@ -30,7 +30,7 @@
     "items": [
       {
         "platform": "Facebook",
-        "url": "https://www.facebook.com/people/Hike-in-Patagonia/100092563431643/"
+        "url": "https://www.facebook.com/people/BAFT-Backpacking-Free-Travel/100071106774899/"
       },
       {
         "platform": "Instagram",
@@ -41,9 +41,9 @@
   "content": {
     "about": {
       "paragraphs": [
-        "BAFT es más que una agencia de turismo: funciona también como un centro de informes para cada visitante y un punto de encuentro para intercambiar experiencias y datos con lugareños y otros viajeros.",
-        "Estamos conformada por jóvenes profesionales del turismo, quienes entendemos que el visitante no es sólo un “Turista” sino una persona interesada en conocer el lugar en donde vivimos, Patagonia, Argentina y Chilena.",
-        "Partiendo de este concepto, brindamos al viajero un abanico de posibilidades según cada perfil, posibilidades económicas y disponibilidad horaria les sugerimos las mejores opciones."
+        "Somos BAFT. No tenemos una oficina donde tengas que venir a buscarnos. Estamos del otro lado de la pantalla. 📲 BAFT es una agencia de turismo virtual, nacida de nuestra experiencia trabajando y viviendo en la Patagonia. Conocemos los lugares, las excursiones, los caminos y también esas pequeñas cosas que muchas veces no aparecen en un folleto.",
+        "Porque cuando llegás a un lugar nuevo, no siempre necesitás hacer \"la excursión más famosa\". A veces querés algo tranquilo, otras veces querés aventura, otras simplemente tenés un día libre y no sabés qué hacer.",
+        "Y ahí estamos nosotros. 🙌"
       ]
     },
     "services": {
@@ -53,8 +53,12 @@
           "description": "Viví recorridos únicos por paisajes naturales, glaciares, montañas y destinos imperdibles de la región."
         },
         {
-          "title": "Alquiler de bicicletas",
-          "description": "Explorá El Calafate y sus alrededores a tu ritmo, con una forma práctica, libre y diferente de moverte."
+          "title": "Parque Nacional Los Glaciares",
+          "description": "Conocé el Glaciar Perito Moreno y descubrí los paisajes únicos de uno de los grandes tesoros naturales de la Patagonia.",
+          "cta": {
+            "label": "Comprar entrada →",
+            "url": "https://ventaweb.apn.gob.ar/"
+          }
         },
         {
           "title": "Aventuras al aire libre",
