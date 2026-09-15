@@ -365,7 +365,7 @@ export default async function CheckoutSuccessPage({
                   </p>
                 </div>
               ) : null}
-              <div className="grid gap-4 sm:grid-cols-2">
+              {/* <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total abonado</p>
                   <p className="mt-1 font-semibold text-gray-900">{amountLabel}</p>
@@ -380,7 +380,7 @@ export default async function CheckoutSuccessPage({
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Estado del pago</p>
                   <p className="mt-1">{paymentStatusLabel}</p>
                 </div>
-              </div>
+              </div> */}
               {orderId ? (
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Número de orden</p>
