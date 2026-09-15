@@ -64,9 +64,12 @@ export default function VendorEnlacesPage() {
             slug: String(e.slug ?? ''),
           }))
           .filter((e) => e.title && e.slug);
-        const filtered = Array.isArray(allowed) && allowed.length > 0 ? all.filter((e) => allowed.includes(e.id)) : all;
-        filtered.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-        setPackages(filtered);
+        const filtered = Array.isArray(allowed) && allowed.length > 0
+          ? all.filter((e) => allowed.includes(e.id))
+          : all;
+        const finalPackages = filtered.length === 0 && Array.isArray(allowed) && allowed.length > 0 ? all : filtered;
+        finalPackages.sort((a, b) => a.title.localeCompare(b.title, 'es'));
+        setPackages(finalPackages);
       } finally {
         setLoading(false);
       }
