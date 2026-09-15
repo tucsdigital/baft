@@ -413,12 +413,12 @@ export default async function CheckoutSuccessPage({
                 </div>
               ) : null}
             </div>
-            {!orderId && !hasSession && (
+            {/* {!orderId && !hasSession && (
               <p className="mt-3 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-700">
                 No detectamos el identificador de sesión. Si esto sucede, escribinos por WhatsApp
                 o mandá un email a {CONTACT_INFO.email} para que lo verifiquemos.
               </p>
-            )}
+            )} */}
           </div>
 
           {orderId ? (
