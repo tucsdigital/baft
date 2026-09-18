@@ -1044,9 +1044,6 @@ export default function AdminReservaForm({ paquetes }: Props) {
                     'Crear reserva'
                   )}
                 </Button>
-                <p className="text-center text-xs text-gray-400">
-                  Se registra el precio y el snapshot de cupo/configuración. Si la fecha tiene cupos, se valida disponibilidad antes de confirmar.
-                </p>
               </div>
             </form>
           </CardContent>

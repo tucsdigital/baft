@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import { getPaqueteBySlug } from '@/lib/paquetes';
 import ClearCheckoutStorage from '@/components/checkout/ClearCheckoutStorage';
 import SuccessVerification from '@/components/checkout/SuccessVerification';
+import DirectVerification from '@/components/checkout/DirectVerification';
 import OrderVerification from '@/components/checkout/OrderVerification';
 import { CONTACT_INFO, SITE_NAME, SOCIAL_MEDIA } from '@/lib/constants';
 import { db } from '@/lib/firebase';
@@ -20,6 +21,7 @@ type SearchParams = Promise<{
   date?: string;
   people?: string;
   sessionId?: string;
+  intentId?: string;
   amount?: string;
   currency?: string;
   paymentMethod?: string;
@@ -171,6 +173,7 @@ export default async function CheckoutSuccessPage({
   const date = params.date?.trim() || '';
   const peopleParam = params.people?.trim();
   const sessionId = params.sessionId?.trim() || '';
+  const intentId = params.intentId?.trim() || '';
   const amountParam = params.amount?.trim();
   const amount = amountParam ? parseInt(amountParam, 10) : 0;
   const currency = params.currency?.trim() || 'ars';
@@ -183,6 +186,12 @@ export default async function CheckoutSuccessPage({
         ? '1 persona'
         : `${people} personas`
       : '';
+
+  // Flujo directo (sin carrito): NO consultar Mercado Pago desde el Server
+  // Component. El componente cliente <DirectVerification /> hace la
+  // verificación (POST verify-direct) con reintentos: el pago tarda unos
+  // segundos en estar disponible y acá solo tenemos un intento, casi siempre
+  // antes de que MP lo publique (devolvía 404 y confundía).
 
   let order: any = null;
   if (orderId) {
@@ -412,7 +421,12 @@ export default async function CheckoutSuccessPage({
               paymentId={paymentId}
               initialPaymentApproved={mpReturnStatus === 'approved'}
             />
-          ) : (hasSession ? <SuccessVerification sessionId={sessionId} /> : null)}
+          ) : (hasSession ? <SuccessVerification sessionId={sessionId} /> : intentId ? (
+            <DirectVerification
+              intentId={intentId}
+              paymentId={paymentId}
+            />
+          ) : null)}
 
           <div className="mt-8 space-y-4">
             <p className="text-center text-sm font-medium text-gray-700">

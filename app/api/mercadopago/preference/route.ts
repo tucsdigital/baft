@@ -906,6 +906,12 @@ export async function POST(request: Request) {
   }
 
   const baseUrl = getRequestBaseUrl(request);
+
+  // Intent + URLs de retorno: el intentId se crea acá pero las back_urls
+  // necesitan incluirlo para que /checkout/success pueda verificar el pago
+  // directo (GET verify-direct) aunque el webhook tarde o no llegue.
+  const intentRef = doc(collection(db, 'checkoutIntents'));
+  const intentId = intentRef.id;
   const sessionAmount = computedPricing.subtotalAmount;
 
   // Construir URLs de retorno
@@ -915,6 +921,7 @@ export async function POST(request: Request) {
       slug: paquete.slug,
       date,
       people,
+      intentId,
     }
   );
   const failureUrl = withQueryParams(
@@ -923,6 +930,7 @@ export async function POST(request: Request) {
       slug: paquete.slug,
       date,
       people,
+      intentId,
     }
   );
   const pendingUrl = withQueryParams(
@@ -931,13 +939,12 @@ export async function POST(request: Request) {
       slug: paquete.slug,
       date,
       people,
+      intentId,
     }
   );
 
   // Registrar intento de checkout + hold de cupo (si aplica)
   const now = Timestamp.now();
-  const intentRef = doc(collection(db, 'checkoutIntents'));
-  const intentId = intentRef.id;
   const externalReference = `pkg-${paquete.id}-${Date.now()}`;
   let holdId: string | null = null;
   let holdExpiresAt: Timestamp | null = null;

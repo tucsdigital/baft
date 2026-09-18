@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getPayment, searchPayments, mapPaymentStatusToReservationStatus, isPaymentApproved, isPaymentRejected } from '@/lib/mercadopago';
-import { getFromEmail } from '@/lib/resend';
+import { getPayment, isPaymentApproved, isPaymentRejected, mapPaymentStatusToReservationStatus } from '@/lib/mercadopago';
+import { getFromEmail, isResendConfigured, resend } from '@/lib/resend';
 import { getPaqueteById } from '@/lib/paquetes';
 import { CONTACT_INFO, SITE_NAME } from '@/lib/constants';
 import {
@@ -16,10 +16,9 @@ import { resolveReferralFromCode, computeCommission, nextPayoutStatusForReservat
 import { getSeatDepartureId, seatIdsFromLabels } from '@/lib/seats/server';
 import type { SeatLayoutTemplate } from '@/types';
 import {
-  generateReservationCode,
   normalizeDigits,
   normalizeEmail,
-  prepareNextReservationCodeInTransaction,
+  reserveNextReservationCode,
 } from '@/lib/reservas/code';
 import { buildDefaultEmailDelivery, buildQueuedEmailDelivery } from '@/lib/sales/status';
 import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
@@ -198,6 +197,40 @@ function getBaseCapacityForDate(
   return resolveDepartureConfig(paquete, date).baseCapacity;
 }
 
+/**
+ * Envía un email con Resend si está configurado. Devuelve el id del proveedor
+ * o null cuando no se pudo enviar (para que el job quede pendiente y el cron
+ * lo reintente). Nunca lanza: fallar el envío no debe romper el webhook.
+ */
+async function trySendEmailNow(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string | null;
+  replyTo?: string | null;
+  from: string;
+}): Promise<string | null> {
+  if (!isResendConfigured() || !resend) return null;
+  try {
+    const { data, error } = await resend.emails.send({
+      from: input.from,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text ?? undefined,
+      replyTo: input.replyTo ?? undefined,
+    });
+    if (error) {
+      console.error('[mercadopago-webhook] Resend rechazó el email:', error);
+      return null;
+    }
+    return data?.id ?? 'sent';
+  } catch (error) {
+    console.error('[mercadopago-webhook] No se pudo enviar el email ahora:', error);
+    return null;
+  }
+}
+
 async function recordMPNotification(params: {
   notificationId: string;
   type: string;
@@ -228,10 +261,6 @@ export async function POST(request: Request) {
     const url = new URL(request.url);
     const body = await request.json().catch(() => null);
     const notification = buildNotificationFromRequest({ body, searchParams: url.searchParams });
-
-    // #region debug-point B:webhook-entry
-    fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'B', location: 'app/api/mercadopago/webhook/route.ts:POST:entry', msg: '[DEBUG] webhook received', data: { type: notification?.type ?? null, action: notification?.action ?? null, paymentId: notification?.data?.id ?? null, queryType: url.searchParams.get('type') ?? url.searchParams.get('topic') ?? null, queryPaymentId: url.searchParams.get('data.id') ?? url.searchParams.get('id') ?? null }, ts: Date.now() }) }).catch(() => {});
-    // #endregion
 
     // Validar que sea una notificación válida
     if (!notification || !notification.type || !notification.data?.id) {
@@ -288,10 +317,6 @@ export async function POST(request: Request) {
     const paymentStatus = paymentInfo.status;
     const isApproved = isPaymentApproved(paymentStatus);
 
-    // #region debug-point B:webhook-payment
-    fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'B', location: 'app/api/mercadopago/webhook/route.ts:POST:paymentInfo', msg: '[DEBUG] webhook payment fetched', data: { paymentId: String(paymentId), externalReference: String(externalReference || ''), paymentStatus: String(paymentStatus || ''), isApproved }, ts: Date.now() }) }).catch(() => {});
-    // #endregion
-
     let orderIdFromRef = '';
     const externalRefStr = String(externalReference || '');
     if (externalRefStr.startsWith('order-')) {
@@ -332,9 +357,6 @@ export async function POST(request: Request) {
     }
 
     if (!intentData) {
-      // #region debug-point C:intent-not-found
-      fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'C', location: 'app/api/mercadopago/webhook/route.ts:POST:intentMissing', msg: '[DEBUG] webhook intent not found', data: { paymentId: String(paymentId), externalReference, orderIdFromRef, orderFound: Boolean(orderData) }, ts: Date.now() }) }).catch(() => {});
-      // #endregion
       await recordMPNotification({
         notificationId,
         type: notification.type,
@@ -351,9 +373,6 @@ export async function POST(request: Request) {
     const cartItems = Array.isArray(orderData?.items) ? orderData.items : (Array.isArray(intentData.items) ? intentData.items : null);
     const orderId = orderData?.id ? String(orderData.id) : '';
     if (cartId && cartItems && cartItems.length) {
-      // #region debug-point D:webhook-transaction-start
-      fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'D', location: 'app/api/mercadopago/webhook/route.ts:POST:transactionStart', msg: '[DEBUG] webhook transaction starting', data: { paymentId: String(paymentId), orderId, cartId: String(cartId), itemCount: cartItems.length, orderStatus: String(orderData?.status ?? ''), orderPaymentStatus: String(orderData?.payment?.status ?? '') }, ts: Date.now() }) }).catch(() => {});
-      // #endregion
       const reservationStatus = mapPaymentStatusToReservationStatus(paymentStatus);
       const isPixPending = paymentStatus === 'pending' || paymentStatus === 'in_process';
       const isRejected = isPaymentRejected(paymentStatus);
@@ -392,6 +411,113 @@ export async function POST(request: Request) {
         pkgs.set(pid, await getPaqueteById(pid));
       }
 
+      // Reservar códigos secuenciales ANTES de la transacción: un código
+      // único por cada item del carrito que aún no tenga reserva. Así la tx
+      // solo lee primero y escribe después (Firestore lo exige) y ningún item
+      // del mismo pago comparte código.
+      let reservedCodes: string[] = [];
+      if (isApproved) {
+        try {
+          for (let i = 0; i < cartItems.length; i += 1) {
+            reservedCodes.push(await reserveNextReservationCode());
+          }
+        } catch (error) {
+          console.error('[mercadopago-webhook] No se pudieron reservar códigos:', error);
+          return NextResponse.json({ error: 'No se pudo generar el código de reserva' }, { status: 500 });
+        }
+      }
+
+      // Envío inmediato de emails (no depende del cron): se preparan los
+      // cuerpos por item usando su propio código y se envían con Resend.
+      // Si el envío funciona, el job se guarda como "sent"; si no, queda
+      // "pending" para que el cron lo reintente.
+      const sendResults: { confirm: Record<string, string>; voucher: Record<string, string>; admin: Record<string, string> } = {
+        confirm: {},
+        voucher: {},
+        admin: {},
+      };
+      if (isApproved) {
+        for (let idx = 0; idx < cartItems.length; idx += 1) {
+          const it = cartItems[idx] as any;
+          const reservationId = orderId
+            ? `ord_${orderId}_${String(it.cartItemId || it.id || `idx_${idx}`)}`
+            : `mp_${paymentId}_${String(it.cartItemId || it.id || `idx_${idx}`)}`;
+          const code = reservedCodes[idx] ?? '';
+          const pkg = pkgs.get(String(it.packageId || '')) ?? null;
+          const finalTitle = String(it.packageTitle || it.experienceTitle || '') || pkg?.titulo || SITE_NAME;
+          const itemDate = String(it.date || 'sin-fecha');
+          const itemPeople = Number(it.people ?? 0) || 0;
+          const itemCurrency = String(it.currency || intentData.currency || 'ars');
+          const itemAmount = Number(it.subtotalAmount ?? it.amountTotal ?? 0) || 0;
+          const itemPeopleLabel = itemPeople === 1 ? '1 persona' : `${itemPeople} personas`;
+          const breakdown = buildPriceBreakdown({
+            rawExtras: (it as any).selectedExtras ?? intentData.selectedExtras,
+            baseSubtotalAmount: (it as any).baseSubtotalAmount ?? intentData.baseSubtotalAmount,
+            people: itemPeople,
+            currency: itemCurrency,
+            peopleLabel: itemPeopleLabel,
+          });
+          const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
+          const itemLookupUrl = siteUrl && code ? `${siteUrl}/consultar-reserva?code=${encodeURIComponent(code)}` : undefined;
+          const itemEmailData = {
+            customerName,
+            experienceTitle: finalTitle,
+            dateFormatted: formatDate(itemDate),
+            peopleLabel: itemPeopleLabel,
+            seatsLabel: Array.isArray((it as any).selectedSeats) && (it as any).selectedSeats.length
+              ? (it as any).selectedSeats.map((s: any) => String(s)).join(', ')
+              : undefined,
+            amountFormatted: formatAmount(itemAmount || 0, itemCurrency),
+            ...breakdown,
+            reservationCode: code,
+            lookupUrl: itemLookupUrl,
+            sessionId: reservationId,
+            customerEmail,
+            customerPhone: customerPhone || undefined,
+            customerCountry: customerCountry || undefined,
+            customerComments: intentComments || undefined,
+          };
+          if (customerEmail) {
+            const confirmId = await trySendEmailNow({
+              to: customerEmail,
+              subject: `Compra confirmada: ${finalTitle}`,
+              html: buildClienteCompraConfirmadaHtml(itemEmailData),
+              text: buildClienteCompraConfirmadaText(itemEmailData),
+              replyTo,
+              from,
+            });
+            if (confirmId) sendResults.confirm[reservationId] = confirmId;
+            if (itemDate && itemDate !== 'sin-fecha') {
+              const voucherId = await trySendEmailNow({
+                to: customerEmail,
+                subject: `Recordatorio de salida (48 hs): ${finalTitle}`,
+                html: buildClienteVoucher48hsHtml(itemEmailData),
+                text: buildClienteVoucher48hsText(itemEmailData),
+                replyTo,
+                from,
+              });
+              // El voucher 48hs se envía "sent" solo si corresponde enviarlo
+              // ya (la salida es en menos de 48hs). Si falta mucho, queda
+              // pendiente para el cron aunque Resend funcione ahora: no
+              // queremos mandar el recordatorio meses antes.
+              const dueNow = computeVoucherNextAttemptAt({ date: itemDate, now }).toMillis() <= now.toMillis() + 30 * 1000;
+              if (voucherId && dueNow) sendResults.voucher[reservationId] = voucherId;
+            }
+          }
+          if (CONTACT_INFO.email) {
+            const adminId = await trySendEmailNow({
+              to: CONTACT_INFO.email,
+              subject: `Nueva reserva: ${finalTitle} — ${customerName || customerEmail}`,
+              html: buildAdminNuevaReservaHtml(itemEmailData),
+              text: buildAdminNuevaReservaText(itemEmailData),
+              replyTo,
+              from,
+            });
+            if (adminId) sendResults.admin[reservationId] = adminId;
+          }
+        }
+      }
+
       try {
         await runTransaction(db, async (tx) => {
           const pendingWrites: Array<() => void> = [];
@@ -400,9 +526,6 @@ export async function POST(request: Request) {
           };
           const queueSet = (ref: any, data: any, options?: any) => {
             pendingWrites.push(() => (options ? tx.set(ref, data, options) : tx.set(ref, data)));
-          };
-          const queueWrite = (write: () => void) => {
-            pendingWrites.push(write);
           };
           const flushWrites = () => {
             for (const write of pendingWrites) write();
@@ -668,7 +791,9 @@ export async function POST(request: Request) {
             const paymentSnap = await tx.get(paymentRef);
 
             if (!reservaSnap.exists()) {
-              const reservationCodeAllocation = await prepareNextReservationCodeInTransaction(tx);
+              // El código se asigna fuera de esta transacción (cada
+              // carrito con N items necesita N códigos; reservarlos uno por
+              // uno dentro de la tx rompe la regla reads-antes-de-writes).
               let referredBy: any = undefined;
               if (referralCode) {
                 const resolved = await resolveReferralFromCode(referralCode);
@@ -702,8 +827,7 @@ export async function POST(request: Request) {
                 }
               }
 
-              const reservationCode = reservationCodeAllocation.reservationCode;
-              queueWrite(reservationCodeAllocation.commit);
+              const reservationCode = reservedCodes[idx] ?? `TMP-${reservationId.slice(-8).toUpperCase()}`;
               const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
               const lookupUrl = siteUrl
                 ? `${siteUrl}/consultar-reserva?code=${encodeURIComponent(reservationCode)}`
@@ -853,17 +977,23 @@ export async function POST(request: Request) {
               }
 
               if (!emailClienteConfirmSnap.exists() && customerEmail && isApproved) {
+                const subjectConfirm = `Compra confirmada: ${finalPackageTitle || SITE_NAME}`;
+                // Jobs "sent" cuando el envío inmediato funcionó: el cliente
+                // recibe el email aunque el cron no esté configurado.
+                const confirmSendId = sendResults.confirm[reservationId] ?? null;
                 queueSet(emailClienteConfirmRef, {
                   type: 'cliente_confirmacion_compra',
-                  status: 'pending',
+                  status: confirmSendId ? 'sent' : 'pending',
                   to: customerEmail,
                   from,
                   replyTo,
-                  subject: `Compra confirmada: ${finalPackageTitle || SITE_NAME}`,
+                  subject: subjectConfirm,
                   html: htmlConfirm,
                   text: textConfirm,
-                  attempts: 0,
+                  attempts: confirmSendId ? 1 : 0,
                   lastError: null,
+                  providerMessageId: confirmSendId,
+                  sentAt: confirmSendId ? now : null,
                   mercadoPagoPaymentId: String(paymentId),
                   reservationId,
                   nextAttemptAt: now,
@@ -873,17 +1003,20 @@ export async function POST(request: Request) {
               }
 
               if (!emailClienteVoucherSnap.exists() && customerEmail && isApproved && shouldQueueVoucher) {
+                const voucherSendId = sendResults.voucher[reservationId] ?? null;
                 queueSet(emailClienteVoucherRef, {
                   type: 'cliente_voucher_48hs',
-                  status: 'pending',
+                  status: voucherSendId ? 'sent' : 'pending',
                   to: customerEmail,
                   from,
                   replyTo,
                   subject: `Recordatorio de salida (48 hs): ${finalPackageTitle || SITE_NAME}`,
                   html: htmlVoucher,
                   text: textVoucher,
-                  attempts: 0,
+                  attempts: voucherSendId ? 1 : 0,
                   lastError: null,
+                  providerMessageId: voucherSendId,
+                  sentAt: voucherSendId ? now : null,
                   mercadoPagoPaymentId: String(paymentId),
                   reservationId,
                   nextAttemptAt: nextAttemptAtVoucher,
@@ -893,17 +1026,20 @@ export async function POST(request: Request) {
               }
 
               if (!emailAdminSnap.exists() && CONTACT_INFO.email && isApproved) {
+                const adminSendId = sendResults.admin[reservationId] ?? null;
                 queueSet(emailAdminRef, {
                   type: 'admin_aviso',
-                  status: 'pending',
+                  status: adminSendId ? 'sent' : 'pending',
                   to: CONTACT_INFO.email,
                   from,
                   replyTo,
                   subject: `Nueva reserva: ${finalPackageTitle || 'Paquete'} — ${customerName || customerEmail}`,
                   html: htmlAdmin,
                   text: textAdmin,
-                  attempts: 0,
+                  attempts: adminSendId ? 1 : 0,
                   lastError: null,
+                  providerMessageId: adminSendId,
+                  sentAt: adminSendId ? now : null,
                   mercadoPagoPaymentId: String(paymentId),
                   reservationId,
                   nextAttemptAt: now,
@@ -1192,16 +1328,9 @@ export async function POST(request: Request) {
           status: 'processed',
         });
 
-        // #region debug-point D:webhook-processed
-        fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'D', location: 'app/api/mercadopago/webhook/route.ts:POST:processed', msg: '[DEBUG] webhook processed successfully', data: { paymentId: String(paymentId), externalReference, orderId, isApproved, paymentStatus: String(paymentStatus || '') }, ts: Date.now() }) }).catch(() => {});
-        // #endregion
-
         return NextResponse.json({ received: true, processed: true });
       } catch (error) {
         const errorDetail = error instanceof Error ? error.message : String(error);
-        // #region debug-point B:webhook-error
-        fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'mp-webhook-order', runId: 'pre-fix', hypothesisId: 'B', location: 'app/api/mercadopago/webhook/route.ts:POST:catch', msg: '[DEBUG] webhook processing failed', data: { paymentId: String(paymentId), externalReference, error: errorDetail }, ts: Date.now() }) }).catch(() => {});
-        // #endregion
         console.error('[mercadopago-webhook] Error procesando carrito:', error);
         await recordMPNotification({
           notificationId,
@@ -1272,7 +1401,15 @@ export async function POST(request: Request) {
     });
 
     const reservationId = `mp_${paymentId}`;
-    const reservationCode = generateReservationCode(reservationId, Date.now());
+    // Código secuencial reservado en su propia transacción (igual que el
+    // resto de los flujos), en lugar del derivado del paymentId.
+    let reservationCode: string;
+    try {
+      reservationCode = await reserveNextReservationCode();
+    } catch (error) {
+      console.error('[mercadopago-webhook] No se pudo generar el código:', error);
+      return NextResponse.json({ error: 'No se pudo generar el código de reserva' }, { status: 500 });
+    }
     const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
     const lookupUrl = siteUrl
       ? `${siteUrl}/consultar-reserva?code=${encodeURIComponent(reservationCode)}`
@@ -1302,6 +1439,49 @@ export async function POST(request: Request) {
     const textAdmin = buildAdminNuevaReservaText(emailData);
     const from = getFromEmail(true);
     const replyTo = process.env.SUPPORT_EMAIL || getFromEmail(false);
+    const nextAttemptAtVoucherDirect = computeVoucherNextAttemptAt({ date, now: Timestamp.now() });
+    const shouldQueueVoucherDirect = Boolean(date && date !== 'sin-fecha');
+    const directSend: { confirm?: string; voucher?: string; admin?: string } = {};
+
+    // Envío inmediato (flujo directo): no depender del cron. Si Resend
+    // está configurado, el cliente recibe el email aunque Vercel Cron no
+    // esté activo o el webhook de localhost no llegue.
+    if (isApproved) {
+      if (customerEmail) {
+        const confirmId = await trySendEmailNow({
+          to: customerEmail,
+          subject: `Compra confirmada: ${finalPackageTitle || SITE_NAME}`,
+          html: htmlConfirm,
+          text: textConfirm,
+          replyTo,
+          from,
+        });
+        if (confirmId) directSend.confirm = confirmId;
+        const voucherDueNow = nextAttemptAtVoucherDirect.toMillis() <= Date.now() + 30 * 1000;
+        if (shouldQueueVoucherDirect && voucherDueNow) {
+          const voucherId = await trySendEmailNow({
+            to: customerEmail,
+            subject: `Recordatorio de salida (48 hs): ${finalPackageTitle || SITE_NAME}`,
+            html: htmlVoucher,
+            text: textVoucher,
+            replyTo,
+            from,
+          });
+          if (voucherId) directSend.voucher = voucherId;
+        }
+      }
+      if (CONTACT_INFO.email) {
+        const adminId = await trySendEmailNow({
+          to: CONTACT_INFO.email,
+          subject: `Nueva reserva: ${finalPackageTitle || 'Paquete'} — ${customerName || customerEmail}`,
+          html: htmlAdmin,
+          text: textAdmin,
+          replyTo,
+          from,
+        });
+        if (adminId) directSend.admin = adminId;
+      }
+    }
 
     // Crear o actualizar reserva en Firestore
     try {
@@ -1321,10 +1501,6 @@ export async function POST(request: Request) {
         const emailClienteConfirmSnap = await tx.get(emailClienteConfirmRef);
         const emailClienteVoucherSnap = await tx.get(emailClienteVoucherRef);
         const emailAdminSnap = await tx.get(emailAdminRef);
-
-        // Lectura del contador de reservas
-        const counterRef = doc(collection(db, 'systemCounters'), 'reservations');
-        const counterSnap = await tx.get(counterRef);
 
         // Lectura de hold y lock (debe ser antes de todas las escrituras)
         let holdSnap: any = null;
@@ -1347,20 +1523,12 @@ export async function POST(request: Request) {
         const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, now });
         const shouldQueueVoucher = Boolean(date && date !== 'sin-fecha');
 
-        // Calcular código de reserva a partir de la lectura del contador
-        const currentCounter = counterSnap.exists() ? Math.max(0, Number((counterSnap.data() as any)?.lastNumber ?? 0) || 0) : 0;
-        const reservationCode = String(currentCounter + 1).padStart(6, '0');
+        // El código ya fue reservado antes de la tx (variable externa
+        // `reservationCode`). No se toca el contador acá.
 
         // ============================================
         // FASE 2: TODAS LAS ESCRITURAS
         // ============================================
-
-        // Actualizar contador de reservas
-        if (counterSnap.exists()) {
-          tx.update(counterRef, { lastNumber: currentCounter + 1, updatedAt: now });
-        } else {
-          tx.set(counterRef, { lastNumber: currentCounter + 1, createdAt: now, updatedAt: now });
-        }
 
         if (!reservaSnap.exists()) {
           // Crear nueva reserva
@@ -1579,19 +1747,22 @@ export async function POST(request: Request) {
           }
         }
 
-        // Email al cliente (solo si aprobado)
+        // Email al cliente (solo si aprobado). Si el envío inmediato
+        // funcionó, el job nace como "sent"; si no, "pending" para el cron.
         if (!emailClienteConfirmSnap.exists() && customerEmail && isApproved) {
           tx.set(emailClienteConfirmRef, {
             type: 'cliente_confirmacion_compra',
-            status: 'pending',
+            status: directSend.confirm ? 'sent' : 'pending',
             to: customerEmail,
             from,
             replyTo,
             subject: `Compra confirmada: ${finalPackageTitle || SITE_NAME}`,
             html: htmlConfirm,
             text: textConfirm,
-            attempts: 0,
+            attempts: directSend.confirm ? 1 : 0,
             lastError: null,
+            providerMessageId: directSend.confirm ?? null,
+            sentAt: directSend.confirm ? now : null,
             mercadoPagoPaymentId: String(paymentId),
             reservationId,
             nextAttemptAt: now,
@@ -1603,15 +1774,17 @@ export async function POST(request: Request) {
         if (!emailClienteVoucherSnap.exists() && customerEmail && isApproved && shouldQueueVoucher) {
           tx.set(emailClienteVoucherRef, {
             type: 'cliente_voucher_48hs',
-            status: 'pending',
+            status: directSend.voucher ? 'sent' : 'pending',
             to: customerEmail,
             from,
             replyTo,
             subject: `Recordatorio de salida (48 hs): ${finalPackageTitle || SITE_NAME}`,
             html: htmlVoucher,
             text: textVoucher,
-            attempts: 0,
+            attempts: directSend.voucher ? 1 : 0,
             lastError: null,
+            providerMessageId: directSend.voucher ?? null,
+            sentAt: directSend.voucher ? now : null,
             mercadoPagoPaymentId: String(paymentId),
             reservationId,
             nextAttemptAt: nextAttemptAtVoucher,
@@ -1624,15 +1797,17 @@ export async function POST(request: Request) {
         if (!emailAdminSnap.exists() && CONTACT_INFO.email && isApproved) {
           tx.set(emailAdminRef, {
             type: 'admin_aviso',
-            status: 'pending',
+            status: directSend.admin ? 'sent' : 'pending',
             to: CONTACT_INFO.email,
             from,
             replyTo,
             subject: `Nueva reserva: ${finalPackageTitle || 'Paquete'} — ${customerName || customerEmail}`,
             html: htmlAdmin,
             text: textAdmin,
-            attempts: 0,
+            attempts: directSend.admin ? 1 : 0,
             lastError: null,
+            providerMessageId: directSend.admin ?? null,
+            sentAt: directSend.admin ? now : null,
             mercadoPagoPaymentId: String(paymentId),
             reservationId,
             nextAttemptAt: now,
