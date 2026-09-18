@@ -73,6 +73,17 @@ const travelerSchema = z.object({
   travelerType: z.enum(['adult', 'minor']).nullable().optional(),
 });
 
+/**
+ * Adicional manual (creación/edición de reservas): título + precio los define
+ * el admin, sin depender del catálogo del paquete. Es lo que permite sumar
+ * un adicional creado para otra excursión.
+ */
+const manualExtraSchema = z.object({
+  title: z.string().min(1).max(120),
+  price: z.number().min(0).max(999999999),
+  scope: z.enum(['per_booking', 'per_person']).optional(),
+});
+
 const adminReservaSchema = z.object({
   packageId: z.string().min(1),
   date: z.string().min(1),
@@ -96,6 +107,8 @@ const adminReservaSchema = z.object({
   vendorId: z.string().min(1).optional(),
   referralCode: z.string().max(60).optional(),
   selectedExtraCodes: z.array(z.enum(['cocheCama', 'panoramicos', 'cafeteras'])).max(10).optional(),
+  addonIds: z.array(z.string().min(1).max(80)).max(20).optional(),
+  manualExtras: z.array(manualExtraSchema).max(20).optional(),
   selectedSeats: z.array(z.string().min(1).max(20)).max(200).optional(),
 }).refine((data) => {
   const a = typeof data.peopleAdults === 'number' ? data.peopleAdults : 0;
@@ -139,6 +152,8 @@ const adminUpdateSchema = z.object({
   enqueueCustomerVoucherEmail: z.boolean().optional(),
   enqueueAdminNotificationEmail: z.boolean().optional(),
   addPaymentEvent: paymentMovementSchema.optional(),
+  /** Sumar un adicional existente a una venta ya creada (edición). */
+  addAddonExtra: manualExtraSchema.optional(),
 });
 
 function parseDate(value: unknown): string {
@@ -520,6 +535,16 @@ export async function POST(request: Request) {
     const selectedExtras = resolveReservationExtraSelections({
       paquete,
       selectedExtraCodes,
+      addonIds: Array.isArray((payload as any).addonIds)
+        ? (payload as any).addonIds.map((id: unknown) => String(id ?? '').trim()).filter(Boolean)
+        : [],
+      manualExtras: Array.isArray((payload as any).manualExtras)
+        ? (payload as any).manualExtras.map((extra: any) => ({
+            label: String(extra?.title ?? '').trim(),
+            amount: Math.max(0, Number(extra?.price ?? 0) || 0),
+            perPerson: String(extra?.scope ?? 'per_booking') === 'per_person',
+          }))
+        : [],
       seatLayoutTemplate: seatLayoutTemplateForExtras,
     });
     const repriced = computeReservationPricing(paquete, payload.date, {
@@ -1077,6 +1102,58 @@ export async function PATCH(request: Request) {
           createdAt: now,
         }),
       }).catch(() => null);
+    }
+
+    if (payload.addAddonExtra) {
+      // Sumar un adicional a una venta creada: se agrega a selectedExtras y
+      // se recalcula amountTotal para que el detalle muestre el nuevo total.
+      const title = String(payload.addAddonExtra.title ?? '').trim().slice(0, 120);
+      const price = Math.max(0, Number(payload.addAddonExtra.price ?? 0) || 0);
+      const perPerson = String(payload.addAddonExtra.scope ?? 'per_booking') === 'per_person';
+      if (!title || price <= 0) {
+        return NextResponse.json({ error: 'Adicional inválido.' }, { status: 400 });
+      }
+      const peopleCount = Math.max(1, Number(reservation.people ?? 1) || 1);
+      const extraInCents = Math.round(price * 100) * (perPerson ? peopleCount : 1);
+      const currentExtras = Array.isArray(reservation.selectedExtras) ? reservation.selectedExtras : [];
+      const nextExtras = [
+        ...currentExtras,
+        {
+          code: 'manualExtra',
+          label: title,
+          amount: extraInCents,
+          source: 'manualExtra',
+          scope: perPerson ? 'per_person' : 'per_booking',
+        },
+      ];
+      const nextTotal = Math.max(0, Number(reservation.amountTotal ?? 0) || 0) + extraInCents;
+      const nowAddon = Timestamp.now();
+      await updateDoc(doc(db, COLLECTION, payload.reservationId), {
+        selectedExtras: nextExtras,
+        amountTotal: nextTotal,
+        updatedAt: nowAddon,
+        statusHistory: arrayUnion({
+          status: reservation.status,
+          actor: 'admin',
+          note: `Adicional sumado: ${title}`,
+          createdAt: nowAddon,
+        }),
+      });
+      const paymentRef = doc(collection(db, COLLECTION, payload.reservationId, 'payments'), `manual_${randomUUID()}`);
+      await setDoc(paymentRef, {
+        method: 'admin',
+        movementType: 'extra',
+        source: 'manual',
+        status: 'recorded',
+        amount: extraInCents,
+        currency: String(reservation.currency || 'ars').toLowerCase(),
+        message: `Adicional sumado: ${title}`,
+        reference: null,
+        recordedBy: adminUser?.email ?? 'admin',
+        occurredAt: nowAddon,
+        createdAt: nowAddon,
+        updatedAt: nowAddon,
+      });
     }
 
     if (payload.enqueueCustomerVoucherEmail) {

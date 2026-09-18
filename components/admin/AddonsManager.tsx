@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, ChevronUp, ImagePlus, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, ImagePlus, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { FormattedAmountInput } from '@/components/ui/formatted-amount-input';
@@ -11,24 +11,36 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import {
   MAX_PACKAGE_ADDONS,
   createEmptyAddon,
   type AddonFormItem,
 } from '@/lib/packages/package-addons';
+import { getAllPaquetesAdmin } from '@/lib/paquetes';
+import { getPackageAddonOptions } from '@/lib/packages/resolve-departure';
 
 type Props = {
   items: AddonFormItem[];
   onItemsChange: (items: AddonFormItem[]) => void;
   disabled?: boolean;
+  currentId?: string;
 };
 
 function formatPricePreview(price: number) {
   return `$${(Math.max(0, Number(price) || 0)).toLocaleString('es-AR')}`;
 }
 
-export default function AddonsManager({ items, onItemsChange, disabled }: Props) {
+export default function AddonsManager({ items, onItemsChange, disabled, currentId }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(items[0]?.id ?? null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const patchItem = (id: string, patch: Partial<AddonFormItem>) => {
     onItemsChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -65,6 +77,43 @@ export default function AddonsManager({ items, onItemsChange, disabled }: Props)
       <p className="text-sm text-gray-500">
         El precio de cada adicional se cobra una sola vez por reserva.
       </p>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setShowImport((prev) => !prev)}
+        disabled={disabled}
+        className="w-full"
+      >
+        <Copy className="mr-2 h-4 w-4" />
+        {showImport ? 'Ocultar importar desde otra excursión' : 'Importar desde otra excursión'}
+      </Button>
+      {showImport ? (
+        <AddonImporter
+          currentId={currentId}
+          disabled={disabled}
+          onImport={(imported) => {
+            const existingTitles = new Set(items.map((item) => item.title.trim().toLowerCase()).filter(Boolean));
+            const fresh = imported.filter((item) => !existingTitles.has(item.title.trim().toLowerCase()));
+            if (fresh.length === 0) {
+              toast.info('Esos adicionales ya están en esta excursión.');
+              return;
+            }
+            const room = Math.max(0, MAX_PACKAGE_ADDONS - items.length);
+            const toAdd = fresh.slice(0, room);
+            onItemsChange([...items, ...toAdd]);
+            if (toAdd[0]) setExpandedId(toAdd[0].id);
+            toast.success(
+              toAdd.length === 1
+                ? `Adicional importado: ${toAdd[0].title}`
+                : `${toAdd.length} adicionales importados.`
+            );
+            if (fresh.length > toAdd.length) {
+              toast.warning(`Solo cabían ${toAdd.length} de ${fresh.length} (máximo ${MAX_PACKAGE_ADDONS}).`);
+            }
+          }}
+        />
+      ) : null}
 
       <div className="space-y-3">
         {items.map((item, index) => {
@@ -271,6 +320,153 @@ export default function AddonsManager({ items, onItemsChange, disabled }: Props)
         <Plus className="mr-2 h-4 w-4" />
         Agregar adicional {items.length > 0 ? `(${items.length}/${MAX_PACKAGE_ADDONS})` : ''}
       </Button>
+    </div>
+  );
+}
+
+/* ------------------------- importar desde otra excursión ------------------------- */
+
+function AddonImporter({
+  currentId,
+  disabled,
+  onImport,
+}: {
+  currentId?: string;
+  disabled?: boolean;
+  onImport: (items: AddonFormItem[]) => void;
+}) {
+  const [packages, setPackages] = useState<Array<{ id: string; titulo: string; count: number; addons: AddonFormItem[] }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [sourceId, setSourceId] = useState('');
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getAllPaquetesAdmin()
+      .then((all) => {
+        if (cancelled) return;
+        const withAddons = all
+          .filter((p) => !currentId || p.id !== currentId)
+          .map((p) => ({
+            id: p.id,
+            titulo: String(p.titulo ?? 'Sin título'),
+            count: getPackageAddonOptions(p as any).length,
+            addons: getPackageAddonOptions(p as any).map((option) => ({
+              id: `addon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+              title: option.title,
+              description: option.description,
+              price: option.price,
+              image: option.image,
+              imageKey: null,
+              enabled: true,
+            })),
+          }))
+          .filter((p) => p.count > 0)
+          .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
+        setPackages(withAddons);
+        if (withAddons[0]) setSourceId(withAddons[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('No pudimos cargar las excursiones.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentId]);
+
+  useEffect(() => {
+    setCheckedIds([]);
+  }, [sourceId]);
+
+  const source = packages.find((p) => p.id === sourceId) ?? null;
+
+  const toggle = (addonId: string) =>
+    setCheckedIds((prev) => (prev.includes(addonId) ? prev.filter((id) => id !== addonId) : [...prev, addonId]));
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+      {loading ? (
+        <p className="flex items-center gap-2 text-sm text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando excursiones con adicionales…
+        </p>
+      ) : packages.length === 0 ? (
+        <p className="text-sm text-gray-500">Ninguna otra excursión tiene adicionales para importar.</p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-sm">Excursión de origen</Label>
+            <Select value={sourceId} onValueChange={setSourceId} disabled={disabled}>
+              <SelectTrigger className="mt-1.5 bg-white">
+                <SelectValue placeholder="Elegí una excursión" />
+              </SelectTrigger>
+              <SelectContent>
+                {packages.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.titulo} ({p.count})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {source ? (
+            <div className="space-y-1.5">
+              {source.addons.map((addon) => {
+                const checked = checkedIds.includes(addon.id);
+                return (
+                  <label
+                    key={addon.id}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(addon.id)}
+                        disabled={disabled}
+                        className="h-4 w-4 accent-neutral-900"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-gray-900">{addon.title}</span>
+                        {addon.description ? (
+                          <span className="block truncate text-xs text-gray-500">{addon.description}</span>
+                        ) : null}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
+                      ${addon.price.toLocaleString('es-AR')}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => {
+              if (!source) return;
+              const selected = source.addons.filter((addon) => checkedIds.includes(addon.id));
+              if (selected.length === 0) {
+                toast.info('Marcá al menos un adicional para importar.');
+                return;
+              }
+              onImport(selected);
+              setCheckedIds([]);
+            }}
+            disabled={disabled || checkedIds.length === 0}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copiar {checkedIds.length > 0 ? `${checkedIds.length} ` : ''}a esta excursión
+          </Button>
+          <p className="text-xs text-gray-500">
+            Se copian título, descripción, precio e imagen. Después podés editarlos acá sin afectar la excursión de origen.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

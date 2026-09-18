@@ -30,7 +30,7 @@ export interface Salida {
   seatLayoutId?: string;
 }
 
-export type ReservationExtraCode = 'cocheCama' | 'panoramicos' | 'cafeteras' | 'administrativeFee' | 'packageAddon';
+export type ReservationExtraCode = 'cocheCama' | 'panoramicos' | 'cafeteras' | 'administrativeFee' | 'packageAddon' | 'manualExtra';
 
 export type ReservationExtraSelection = {
   code: ReservationExtraCode;

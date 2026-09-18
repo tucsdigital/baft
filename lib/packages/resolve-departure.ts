@@ -71,6 +71,7 @@ const EXTRA_LABELS: Record<ReservationExtraCode, string> = {
   cafeteras: 'Cafeteras',
   administrativeFee: 'Gastos Administrativos',
   packageAddon: 'Adicional',
+  manualExtra: 'Adicional',
 };
 
 function normalizeText(value: unknown): string {
@@ -197,6 +198,12 @@ export function resolveReservationExtraSelections(params: {
   paquete: Paquete;
   selectedExtraCodes?: Array<string | ReservationExtraCode> | null;
   addonIds?: Array<string> | null;
+  /**
+   * Adicionales libres definidos por el admin (no atados al catálogo del
+   * paquete). Precio en unidades (pesos/dólares/reales, como los addons).
+   * Permite sumar a cualquier reserva un adicional creado para otra excursión.
+   */
+  manualExtras?: Array<{ label: string; amount: number; perPerson?: boolean }> | null;
   seatLayoutTemplate?: Pick<SeatLayoutTemplate, 'amenities'> | null;
 }): ReservationExtraSelection[] {
   const requested = new Set(
@@ -209,6 +216,20 @@ export function resolveReservationExtraSelections(params: {
     if (requested.has(option.code)) selections.push(option);
   });
   getPackageAddonExtraSelections(params.paquete, params.addonIds).forEach((option) => selections.push(option));
+  if (Array.isArray(params.manualExtras)) {
+    for (const extra of params.manualExtras) {
+      const label = String(extra?.label ?? '').trim();
+      const amount = Math.max(0, Number(extra?.amount ?? 0) || 0);
+      if (!label || amount <= 0) continue;
+      selections.push({
+        code: 'manualExtra',
+        label,
+        amount: toAmountCents(amount),
+        source: 'manualExtra',
+        scope: extra?.perPerson ? 'per_person' : 'per_booking',
+      });
+    }
+  }
   const administrativeFeeExtra = getAdministrativeFeeExtraSelection(params.paquete);
   if (administrativeFeeExtra) selections.push(administrativeFeeExtra);
   return selections;

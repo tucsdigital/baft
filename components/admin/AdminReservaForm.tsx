@@ -27,6 +27,7 @@ import type {
 import type { Vendor, ReferralLink } from '@/types/vendor';
 import type { DepartureSeat, Paquete, SeatLayoutTemplate } from '@/types';
 import { getVendors, getReferralLinksByVendor } from '@/lib/vendors';
+import { getAllPaquetesAdmin } from '@/lib/paquetes';
 import { NationalitySelect } from '@/components/ui/nationality-select';
 import { PhoneWithPrefixInput } from '@/components/ui/phone-with-prefix-input';
 import { DEFAULT_COUNTRY_NAME, applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
@@ -34,10 +35,12 @@ import SeatMap from '@/components/seats/SeatMap';
 import {
   computeReservationPricing,
   getOperationalDepartureDates,
+  getPackageAddonOptions,
   getSeatLayoutExtraOptions,
   resolveDepartureConfig,
   resolveReservationExtraSelections,
 } from '@/lib/packages/resolve-departure';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type Props = {
   paquetes: Paquete[];
@@ -139,6 +142,20 @@ export default function AdminReservaForm({ paquetes }: Props) {
   const [seatData, setSeatData] = useState<{ template: SeatLayoutTemplate; seats: DepartureSeat[] } | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [selectedExtraCodes, setSelectedExtraCodes] = useState<string[]>([]);
+  /**
+   * Adicionales elegidos (del paquete actual o importados de otras
+   * excursiones): se envían como `manualExtras` con precio fijado, así no
+   * dependen del catálogo del paquete destino.
+   */
+  const [manualExtras, setManualExtras] = useState<
+    Array<{ key: string; title: string; price: number; packageTitle?: string }>
+  >([]);
+  const [showAddonCatalog, setShowAddonCatalog] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [addonCatalog, setAddonCatalog] = useState<
+    Array<{ packageId: string; packageTitle: string; addon: { id: string; title: string; description: string; price: number } }>
+  >([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [passengerDetails, setPassengerDetails] = useState<TravelerForm[]>([]);
 
   const selectedPaquete = useMemo(
@@ -257,14 +274,77 @@ export default function AdminReservaForm({ paquetes }: Props) {
     return resolveDepartureConfig(selectedPaquete, date);
   }, [selectedPaquete, date]);
   const currency = String(resolvedSelectedDeparture?.displayCurrency ?? selectedPaquete?.moneda ?? 'ARS').toUpperCase();
+
+  // Al cambiar de paquete se descartan los adicionales propios (sus ids no
+  // existen en el otro), pero se conservan los importados del catálogo.
+  useEffect(() => {
+    setManualExtras((prev) => prev.filter((item) => item.key.startsWith('catalog:')));
+  }, [selectedPackageId]);
+
+  // Catálogo de adicionales de TODAS las excursiones (para importar desde
+  // otras). Se carga bajo demanda al abrir el buscador. Precio en unidades.
+  useEffect(() => {
+    if (!showAddonCatalog) return;
+    let cancelled = false;
+    setLoadingCatalog(true);
+    getAllPaquetesAdmin()
+      .then((all) => {
+        if (cancelled) return;
+        const entries: Array<{
+          packageId: string;
+          packageTitle: string;
+          addon: { id: string; title: string; description: string; price: number };
+        }> = [];
+        for (const pkg of all) {
+          if (!pkg || pkg.id === selectedPackageId) continue;
+          const options = getPackageAddonOptions(pkg as any);
+          for (const option of options) {
+            entries.push({
+              packageId: pkg.id,
+              packageTitle: String(pkg.titulo ?? 'Sin título'),
+              addon: { id: option.id, title: option.title, description: option.description, price: option.price },
+            });
+          }
+        }
+        entries.sort((a, b) =>
+          a.packageTitle.localeCompare(b.packageTitle, 'es') || a.addon.title.localeCompare(b.addon.title, 'es')
+        );
+        setAddonCatalog(entries);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('No pudimos cargar los adicionales.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCatalog(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showAddonCatalog, selectedPackageId]);
+
+  const filteredCatalog = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase();
+    if (!query) return addonCatalog;
+    return addonCatalog.filter(
+      (entry) =>
+        entry.addon.title.toLowerCase().includes(query) ||
+        entry.packageTitle.toLowerCase().includes(query)
+    );
+  }, [addonCatalog, catalogQuery]);
+
   const selectedExtras = useMemo(() => {
     if (!selectedPaquete) return [];
     return resolveReservationExtraSelections({
       paquete: selectedPaquete,
       selectedExtraCodes,
+      manualExtras: manualExtras.map((item) => ({ label: item.title, amount: item.price })),
       seatLayoutTemplate: seatData?.template ?? null,
     });
-  }, [seatData?.template, selectedExtraCodes, selectedPaquete]);
+  }, [seatData?.template, manualExtras, selectedExtraCodes, selectedPaquete]);
+  const packageAddonOptions = useMemo(
+    () => (selectedPaquete ? getPackageAddonOptions(selectedPaquete) : []),
+    [selectedPaquete]
+  );
   const seatExtraOptions = useMemo(
     () => getSeatLayoutExtraOptions(seatData?.template ?? null),
     [seatData?.template]
@@ -507,6 +587,14 @@ export default function AdminReservaForm({ paquetes }: Props) {
           ...(depositPercentAdults.trim() ? { depositPercentAdults: Number(depositPercentAdults) } : {}),
           ...(depositPercentMinors.trim() ? { depositPercentMinors: Number(depositPercentMinors) } : {}),
           ...(selectedExtraCodes.length ? { selectedExtraCodes } : {}),
+          ...(manualExtras.length
+            ? {
+                manualExtras: manualExtras.map((item) => ({
+                  title: item.title,
+                  price: Math.max(0, Number(item.price) || 0),
+                })),
+              }
+            : {}),
           ...(seatsEnabled ? { selectedSeats: selectedSeatLabels } : {}),
           ...(attachments.length > 0
             ? {
@@ -690,6 +778,175 @@ export default function AdminReservaForm({ paquetes }: Props) {
                   </div>
                 </div>
               ) : null}
+
+              {packageAddonOptions.length > 0 ? (
+                <div className="rounded-2xl bg-gray-50 p-4">
+                  <Label className="text-xs text-gray-600">Adicionales del paquete</Label>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Se cobran una sola vez por reserva, no por persona.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {packageAddonOptions.map((addon) => {
+                      const key = `pkg:${selectedPackageId}:${addon.id}`;
+                      const checked = manualExtras.some((item) => item.key === key);
+                      return (
+                        <label
+                          key={addon.id}
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition ${
+                            checked ? 'border-neutral-300 bg-white' : 'border-transparent bg-white'
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(next) =>
+                                setManualExtras((prev) =>
+                                  next
+                                    ? [
+                                        ...prev,
+                                        {
+                                          key,
+                                          title: addon.title,
+                                          price: Math.max(0, Number(addon.price) || 0),
+                                        },
+                                      ]
+                                    : prev.filter((item) => item.key !== key)
+                                )
+                              }
+                              disabled={submitting}
+                              aria-label={addon.title}
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium text-gray-900">{addon.title}</span>
+                              {addon.description ? (
+                                <span className="block truncate text-xs text-gray-500">{addon.description}</span>
+                              ) : null}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
+                            ${Math.max(0, Number(addon.price) || 0).toLocaleString('es-AR')}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-2xl bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <Label className="text-xs text-gray-600">Adicionales de otras excursiones</Label>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Traé un adicional creado para otra excursión sin salir de acá.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={submitting || loadingCatalog}
+                    onClick={() => setShowAddonCatalog((prev) => !prev)}
+                  >
+                    {showAddonCatalog ? 'Ocultar' : loadingCatalog ? 'Cargando…' : 'Buscar'}
+                  </Button>
+                </div>
+                {manualExtras.length > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    {manualExtras
+                      .filter((item) => item.key.startsWith('catalog:'))
+                      .map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-gray-900">{item.title}</span>
+                            <span className="block truncate text-xs text-gray-500">{item.packageTitle}</span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span className="text-sm font-semibold tabular-nums text-gray-900">
+                              ${item.price.toLocaleString('es-AR')}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={submitting}
+                              onClick={() => setManualExtras((prev) => prev.filter((row) => row.key !== item.key))}
+                              aria-label={`Quitar ${item.title}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+                {showAddonCatalog ? (
+                  <div className="mt-3">
+                    <Input
+                      value={catalogQuery}
+                      onChange={(event) => setCatalogQuery(event.target.value)}
+                      placeholder="Buscar por adicional o excursión…"
+                      disabled={submitting}
+                    />
+                    <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
+                      {filteredCatalog.length === 0 ? (
+                        <p className="rounded-xl bg-white px-3 py-2.5 text-xs text-gray-500">
+                          {loadingCatalog
+                            ? 'Cargando catálogo…'
+                            : 'Sin resultados. Ninguna otra excursión tiene adicionales que coincidan.'}
+                        </p>
+                      ) : (
+                        filteredCatalog.slice(0, 30).map((entry) => {
+                          const key = `catalog:${entry.packageId}:${entry.addon.id}`;
+                          const added = manualExtras.some((item) => item.key === key);
+                          return (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-black/[0.04]"
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-medium text-gray-900">{entry.addon.title}</span>
+                                <span className="block truncate text-xs text-gray-500">{entry.packageTitle}</span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <span className="text-sm font-semibold tabular-nums text-gray-900">
+                                  ${entry.addon.price.toLocaleString('es-AR')}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant={added ? 'outline' : 'default'}
+                                  size="sm"
+                                  disabled={submitting || added}
+                                  onClick={() =>
+                                    setManualExtras((prev) =>
+                                      added
+                                        ? prev
+                                        : [
+                                            ...prev,
+                                            {
+                                              key,
+                                              title: entry.addon.title,
+                                              price: entry.addon.price,
+                                              packageTitle: entry.packageTitle,
+                                            },
+                                          ]
+                                    )
+                                  }
+                                >
+                                  {added ? 'Sumado' : 'Sumar'}
+                                </Button>
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </section>
 
             {seatsEnabled && date !== 'sin-fecha' ? (

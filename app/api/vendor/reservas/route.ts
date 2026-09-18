@@ -31,6 +31,12 @@ const travelerSchema = z.object({
   travelerType: z.enum(['adult', 'minor']).nullable().optional(),
 });
 
+const manualExtraSchema = z.object({
+  title: z.string().min(1).max(120),
+  price: z.number().min(0).max(999999999),
+  scope: z.enum(['per_booking', 'per_person']).optional(),
+});
+
 const bodySchema = z.object({
   packageId: z.string().min(1),
   date: z.string().min(1),
@@ -44,6 +50,8 @@ const bodySchema = z.object({
   customerComments: z.string().max(500).optional(),
   passengerDetails: z.array(travelerSchema).max(49).optional(),
   selectedExtraCodes: z.array(z.enum(['cocheCama', 'panoramicos', 'cafeteras'])).max(10).optional(),
+  addonIds: z.array(z.string().min(1).max(80)).max(20).optional(),
+  manualExtras: z.array(manualExtraSchema).max(20).optional(),
   status: reservationStatusEnum.optional(),
 }).superRefine((data, ctx) => {
   const additionalTravelers = Math.max(0, data.people - 1);
@@ -155,6 +163,16 @@ export async function POST(request: Request) {
     const selectedExtras = resolveReservationExtraSelections({
       paquete,
       selectedExtraCodes,
+      addonIds: Array.isArray((payload as any).addonIds)
+        ? (payload as any).addonIds.map((id: unknown) => String(id ?? '').trim()).filter(Boolean)
+        : [],
+      manualExtras: Array.isArray((payload as any).manualExtras)
+        ? (payload as any).manualExtras.map((extra: any) => ({
+            label: String(extra?.title ?? '').trim(),
+            amount: Math.max(0, Number(extra?.price ?? 0) || 0),
+            perPerson: String(extra?.scope ?? 'per_booking') === 'per_person',
+          }))
+        : [],
       seatLayoutTemplate: seatLayoutTemplateForExtras,
     });
     const repriced = computeReservationPricing(paquete, payload.date, {
@@ -250,7 +268,7 @@ export async function POST(request: Request) {
         slug: packageSlug,
         title: paquete.titulo,
       },
-      selectedExtras: selectedExtras.length ? selectedExtras : null,
+      selectedExtras: selectedExtras.length ? (selectedExtras as any) : null,
       customerBirthDate: payload.customerBirthDate,
       passengerDetails: payload.passengerDetails ?? [],
       referredBy,

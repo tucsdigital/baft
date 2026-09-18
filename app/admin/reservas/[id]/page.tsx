@@ -49,6 +49,8 @@ import {
 import { toast } from 'sonner';
 import type { Vendor, ReferralLink } from '@/types/vendor';
 import { getVendors, getReferralLinksByVendor } from '@/lib/vendors';
+import { getAllPaquetesAdmin } from '@/lib/paquetes';
+import { getPackageAddonOptions } from '@/lib/packages/resolve-departure';
 import { getCountryByName } from '@/lib/countries';
 import { buildVentaStatuses, ventaStatusLabel } from '@/lib/sales/status';
 import { computeVentaFinance, financeStatusLabel, type VentaFinance } from '@/lib/sales/finance';
@@ -206,6 +208,16 @@ export default function ReservaDetailPage() {
   const [savingMovement, setSavingMovement] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [form, setForm] = useState<PaymentFormState>({ movementType: 'payment', amount: '', method: 'transfer', reference: '', message: '' });
+  const [showAddonForm, setShowAddonForm] = useState(false);
+  const [addonCatalog, setAddonCatalog] = useState<
+    Array<{ key: string; packageTitle: string; addon: { id: string; title: string; price: number } }>
+  >([]);
+  const [loadingAddons, setLoadingAddons] = useState(false);
+  const [addonQuery, setAddonQuery] = useState('');
+  const [addonPickedKey, setAddonPickedKey] = useState('');
+  const [addonTitle, setAddonTitle] = useState('');
+  const [addonPrice, setAddonPrice] = useState('');
+  const [savingAddon, setSavingAddon] = useState(false);
 
   const load = useCallback(async (withSkeleton = false) => {
     if (withSkeleton) setLoading(true);
@@ -231,6 +243,36 @@ export default function ReservaDetailPage() {
   }, [params.id, router]);
 
   useEffect(() => { load(true); }, [load]);
+
+  // Catálogo de adicionales de esta + todas las excursiones (edición de la
+  // venta: permite sumar un adicional creado para otro paquete).
+  useEffect(() => {
+    let off = false;
+    setLoadingAddons(true);
+    getAllPaquetesAdmin()
+      .then((all) => {
+        if (off) return;
+        const entries: Array<{ key: string; packageTitle: string; addon: { id: string; title: string; price: number } }> = [];
+        const currentId = String(reserva?.packageId ?? reserva?.experienceId ?? '');
+        for (const pkg of all) {
+          if (!pkg) continue;
+          const isCurrent = currentId && pkg.id === currentId;
+          const options = getPackageAddonOptions(pkg as any);
+          for (const option of options) {
+            entries.push({
+              key: `${isCurrent ? 'pkg' : 'catalog'}:${pkg.id}:${option.id}`,
+              packageTitle: isCurrent ? 'Esta excursión' : String(pkg.titulo ?? 'Sin título'),
+              addon: { id: option.id, title: option.title, price: option.price },
+            });
+          }
+        }
+        entries.sort((a, b) => a.addon.title.localeCompare(b.addon.title, 'es'));
+        setAddonCatalog(entries);
+      })
+      .catch(() => { if (!off) setAddonCatalog([]); })
+      .finally(() => { if (!off) setLoadingAddons(false); });
+    return () => { off = true; };
+  }, [reserva?.experienceId, reserva?.packageId]);
 
   useEffect(() => {
     let off = false;
@@ -305,6 +347,56 @@ export default function ReservaDetailPage() {
       return !lp || lp === pid;
     });
   }, [links, reserva?.experienceId, reserva?.packageId]);
+
+  const filteredAddons = useMemo(() => {
+    const query = addonQuery.trim().toLowerCase();
+    const existingLabels = new Set(
+      ((reserva?.selectedExtras ?? []) as Array<{ label?: string }>).map((x) => String(x?.label ?? '').trim().toLowerCase())
+    );
+    return addonCatalog.filter((entry) => {
+      if (existingLabels.has(entry.addon.title.trim().toLowerCase())) return false;
+      if (!query) return true;
+      return (
+        entry.addon.title.toLowerCase().includes(query) ||
+        entry.packageTitle.toLowerCase().includes(query)
+      );
+    });
+  }, [addonCatalog, addonQuery, reserva?.selectedExtras]);
+
+  useEffect(() => {
+    if (!addonPickedKey) return;
+    const picked = addonCatalog.find((entry) => entry.key === addonPickedKey);
+    if (picked) {
+      setAddonTitle(picked.addon.title);
+      setAddonPrice(String(picked.addon.price));
+    }
+  }, [addonCatalog, addonPickedKey]);
+
+  const handleAddAddon = async () => {
+    const token = await authed(); if (!token || !reserva) return;
+    const title = addonTitle.trim().slice(0, 120);
+    const price = Number(String(addonPrice).replace(/\./g, '').replace(',', '.').trim());
+    if (!title) { toast.error('Elegí un adicional o escribí el título'); return; }
+    if (!Number.isFinite(price) || price <= 0) { toast.error('Ingresá un precio válido'); return; }
+    setSavingAddon(true);
+    try {
+      const res = await fetch('/api/admin/reservas', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          reservationId: reserva.id,
+          addAddonExtra: { title, price, scope: 'per_booking' },
+        }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => null); throw new Error(err?.error ?? ''); }
+      toast.success(`Adicional sumado: ${title}`);
+      setAddonTitle('');
+      setAddonPrice('');
+      setAddonPickedKey('');
+      setShowAddonForm(false);
+      await load(false);
+    } catch { toast.error('No pudimos sumar el adicional'); } finally { setSavingAddon(false); }
+  };
 
   if (loading) {
     return (
@@ -655,9 +747,100 @@ export default function ReservaDetailPage() {
                         </p>
                       );
                     })}
-                    <p className="mt-2 flex justify-between border-t border-slate-200/70 pt-2 text-sm font-semibold text-slate-900">
-                      <span>Total</span><span className="tabular-nums">{formatAmount(finance.billedTotal, finance.currency)}</span>
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-2">
+                      <p className="text-sm font-semibold text-slate-900">Total <span className="font-normal text-slate-400">· {formatAmount(finance.billedTotal, finance.currency)}</span></p>
+                      <Button size="sm" variant="outline" onClick={() => setShowAddonForm((v) => !v)}>
+                        <Plus className="h-3.5 w-3.5" />{showAddonForm ? 'Cerrar' : 'Sumar adicional'}
+                      </Button>
+                    </div>
+                    {showAddonForm && (
+                      <div className="mt-2 rounded-xl bg-white p-3 ring-1 ring-black/[0.06]">
+                        <p className="text-xs text-slate-500">
+                          Sumá un adicional ya creado (de esta u otra excursión). Se agrega al total y queda registrado como movimiento.
+                        </p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label>Buscar adicional</Label>
+                            <Input
+                              value={addonQuery}
+                              onChange={(e) => { setAddonQuery(e.target.value); setAddonPickedKey(''); }}
+                              placeholder="Ej. almuerzo, traslado, fotos…"
+                              disabled={savingAddon || loadingAddons}
+                            />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label>Adicional</Label>
+                            <Select value={addonPickedKey || 'none'} onValueChange={setAddonPickedKey} disabled={savingAddon || loadingAddons || filteredAddons.length === 0}>
+                              <SelectTrigger>
+                                <SelectValue placeholder={loadingAddons ? 'Cargando…' : filteredAddons.length ? 'Elegí un adicional' : 'Sin resultados'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Elegí un adicional</SelectItem>
+                                {filteredAddons.slice(0, 40).map((entry) => (
+                                  <SelectItem key={entry.key} value={entry.key}>
+                                    {entry.addon.title} · ${entry.addon.price.toLocaleString('es-AR')} · {entry.packageTitle}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Título</Label>
+                            <Input value={addonTitle} onChange={(e) => setAddonTitle(e.target.value)} placeholder="Se completa solo" disabled={savingAddon} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Precio (por reserva)</Label>
+                            <Input value={addonPrice} onChange={(e) => setAddonPrice(e.target.value)} placeholder="0" inputMode="decimal" disabled={savingAddon} />
+                          </div>
+                        </div>
+                        <Button size="sm" variant="success" className="mt-3" onClick={handleAddAddon} disabled={savingAddon}>
+                          {savingAddon ? <><Loader2 className="h-4 w-4 animate-spin" />Sumando</> : 'Sumar a la venta'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {extras.length === 0 && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3.5 py-3 ring-1 ring-black/[0.04]">
+                    <p className="text-sm text-slate-500">Sin adicionales en esta venta.</p>
+                    <Button size="sm" variant="outline" onClick={() => setShowAddonForm((v) => !v)}>
+                      <Plus className="h-3.5 w-3.5" />{showAddonForm ? 'Cerrar' : 'Sumar adicional'}
+                    </Button>
+                  </div>
+                )}
+                {extras.length === 0 && showAddonForm && (
+                  <div className="mt-2 rounded-xl bg-slate-50 p-3 ring-1 ring-black/[0.04]">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1 sm:col-span-2">
+                        <Label>Buscar adicional</Label>
+                        <Input value={addonQuery} onChange={(e) => { setAddonQuery(e.target.value); setAddonPickedKey(''); }} placeholder="Ej. almuerzo, traslado, fotos…" disabled={savingAddon || loadingAddons} />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <Label>Adicional</Label>
+                        <Select value={addonPickedKey || 'none'} onValueChange={setAddonPickedKey} disabled={savingAddon || loadingAddons || filteredAddons.length === 0}>
+                          <SelectTrigger><SelectValue placeholder={loadingAddons ? 'Cargando…' : 'Elegí un adicional'} /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Elegí un adicional</SelectItem>
+                            {filteredAddons.slice(0, 40).map((entry) => (
+                              <SelectItem key={entry.key} value={entry.key}>
+                                {entry.addon.title} · ${entry.addon.price.toLocaleString('es-AR')} · {entry.packageTitle}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Título</Label>
+                        <Input value={addonTitle} onChange={(e) => setAddonTitle(e.target.value)} placeholder="Se completa solo" disabled={savingAddon} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Precio (por reserva)</Label>
+                        <Input value={addonPrice} onChange={(e) => setAddonPrice(e.target.value)} placeholder="0" inputMode="decimal" disabled={savingAddon} />
+                      </div>
+                    </div>
+                    <Button size="sm" variant="success" className="mt-3" onClick={handleAddAddon} disabled={savingAddon}>
+                      {savingAddon ? <><Loader2 className="h-4 w-4 animate-spin" />Sumando</> : 'Sumar a la venta'}
+                    </Button>
                   </div>
                 )}
                 <p className="mt-3 text-xs text-slate-400">
