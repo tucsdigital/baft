@@ -63,7 +63,6 @@ export default function AddonsManager({ items, onItemsChange, disabled }: Props)
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        Opcional. Se ofrecen en el modal de reserva después de elegir la fecha, como tarjetas comerciales.
         El precio de cada adicional se cobra una sola vez por reserva.
       </p>
 

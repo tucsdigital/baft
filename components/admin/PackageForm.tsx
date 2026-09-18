@@ -736,7 +736,7 @@ export default function PackageForm(props: Props) {
           <CardHeader className="pb-4">
             <CardTitle>Adicionales</CardTitle>
             <p className="text-base text-gray-600 mt-1">
-              Opcionales que el cliente puede sumar en el modal de reserva, después de elegir la fecha.
+              Opcionales que el cliente puede sumar a la reserva, después de elegir la fecha.
             </p>
           </CardHeader>
           <CardContent>
