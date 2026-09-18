@@ -38,6 +38,7 @@ const navigation = [
   { name: 'Configuración', href: '/admin/seguridad', icon: ShieldCheck },
   { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { name: 'Consultas', href: '/admin/consultas', icon: MessageSquare },
+  { name: 'Emails', href: '/admin/emails', icon: Mail },
   { name: 'Newsletter', href: '/admin/newsletter', icon: Mail },
   { name: 'Documentación', href: '/admin/documentacion', icon: BookOpen },
 ];
