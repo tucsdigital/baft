@@ -8,6 +8,7 @@ import Link from 'next/link';
 import RichTextEditor from '@/components/admin/RichTextEditor';
 import ItineraryStepsEditor from '@/components/admin/ItineraryStepsEditor';
 import ImageUploader from '@/components/admin/ImageUploader';
+import AddonsManager from '@/components/admin/AddonsManager';
 import EditableList from '@/components/admin/EditableList';
 import DragDropOrderManager from '@/components/admin/DragDropOrderManager';
 import SalidasManager from '@/components/admin/SalidasManager';
@@ -29,6 +30,7 @@ import {
   normalizePackageTypes,
   type PackageAdminFormData,
 } from '@/lib/packages/admin-form';
+import type { AddonFormItem } from '@/lib/packages/package-addons';
 import { humanizeExcursionType, type ExcursionTypeOption } from '@/lib/packages/package-types';
 
 type Props = {
@@ -49,6 +51,8 @@ type Props = {
   onNoIncludeItemsChange: (items: string[]) => void;
   condicionesItems: CondicionItem[];
   onCondicionesItemsChange: (items: CondicionItem[]) => void;
+  addons: AddonFormItem[];
+  onAddonsChange: (items: AddonFormItem[]) => void;
   salidas: Salida[];
   onSalidasChange: (salidas: Salida[]) => void;
   imagenTarjetaPreview: string[];
@@ -92,6 +96,8 @@ export default function PackageForm(props: Props) {
     onNoIncludeItemsChange,
     condicionesItems,
     onCondicionesItemsChange,
+    addons,
+    onAddonsChange,
     salidas,
     onSalidasChange,
     imagenTarjetaPreview,
@@ -726,6 +732,18 @@ export default function PackageForm(props: Props) {
           </CardContent>
         </Card>
 
+        <Card id="adicionales-section">
+          <CardHeader className="pb-4">
+            <CardTitle>Adicionales</CardTitle>
+            <p className="text-base text-gray-600 mt-1">
+              Opcionales que el cliente puede sumar en el modal de reserva, después de elegir la fecha.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <AddonsManager items={addons} onItemsChange={onAddonsChange} disabled={isBusy} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-4">
             <CardTitle>Configuracion y Visibilidad</CardTitle>
@@ -783,6 +801,32 @@ export default function PackageForm(props: Props) {
                 El usuario podrá reservar hasta este límite en una sola operación. El calendario además validará el cupo disponible de cada día.
               </p>
               {errors.maxPersonasPorReserva && <p className="text-base text-red-500 mt-1">{errors.maxPersonasPorReserva.message}</p>}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <Label htmlFor="minLeadHours">Anticipación mínima de reserva (horas)</Label>
+              <Controller
+                name="minLeadHours"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    id="minLeadHours"
+                    type="number"
+                    min={0}
+                    max={720}
+                    value={field.value ?? 48}
+                    onChange={(event) => field.onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))}
+                    className="mt-1.5 max-w-xs"
+                  />
+                )}
+              />
+              <p className="mt-2 text-sm text-gray-500">
+                Horas de anticipación mínima para poder reservar una fecha. Con el valor recomendado de{' '}
+                <span className="font-semibold text-gray-700">48 hs</span>, hoy y mañana quedan bloqueados en el
+                calendario y el checkout rechaza fechas fuera del plazo. Usá 0 para permitir reservas de último
+                momento.
+              </p>
+              {errors.minLeadHours && <p className="text-base text-red-500 mt-1">{errors.minLeadHours.message}</p>}
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">

@@ -251,10 +251,6 @@ export default async function CheckoutSuccessPage({
       : Array.isArray(primaryReservation?.selectedSeats) && primaryReservation.selectedSeats.length > 0
         ? primaryReservation.selectedSeats.join(', ')
         : '';
-  const pickupPointLabel =
-    String(primaryReservation?.pickupPoint ?? primaryItem?.pickupPoint ?? '').trim() || '';
-  const pickupPointTimeLabel =
-    String(primaryReservation?.pickupPointTime ?? primaryItem?.pickupPointTime ?? '').trim() || '';
   const selectedExtras = Array.isArray(primaryReservation?.selectedExtras)
     ? primaryReservation.selectedExtras
     : Array.isArray(primaryItem?.selectedExtras)
@@ -344,17 +340,6 @@ export default async function CheckoutSuccessPage({
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ubicación</p>
                   <p className="mt-1">{locationLabel}</p>
-                </div>
-              ) : null}
-              {pickupPointLabel ? (
-                <div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ascenso</p>
-                    <p className="mt-1">
-                      {pickupPointLabel}
-                      {pickupPointTimeLabel ? ` · ${pickupPointTimeLabel}` : ''}
-                    </p>
-                  </div>
                 </div>
               ) : null}
               {selectedExtras.length > 0 ? (

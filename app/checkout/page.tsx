@@ -9,12 +9,13 @@ import {
   normalizePeopleCategories,
   type PeopleBreakdown,
 } from '@/lib/packages/people-categories';
-import { computeReservationPricing, getAdministrativeFeeExtraSelection } from '@/lib/packages/resolve-departure';
+import { computeReservationPricing, getAdministrativeFeeExtraSelection, getPackageAddonExtraSelections, getPackageAddonOptions } from '@/lib/packages/resolve-departure';
+import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 
 /** Sin caché: datos de experiencia y reserva siempre actualizados */
 export const revalidate = 0;
 
-type SearchParams = Promise<{ slug?: string; date?: string; people?: string; pax?: string; cart?: string }>;
+type SearchParams = Promise<{ slug?: string; date?: string; people?: string; pax?: string; addons?: string; cart?: string }>;
 
 export default async function CheckoutPage({
   searchParams,
@@ -25,6 +26,7 @@ export default async function CheckoutPage({
   const slug = params.slug?.trim();
   const dateParam = params.date?.trim();
   const paxParam = params.pax?.trim();
+  const addonsParam = params.addons?.trim();
   if (params.cart === '1') redirect('/excursiones');
   if (!slug) redirect('/');
 
@@ -89,6 +91,8 @@ export default async function CheckoutPage({
   if (date !== 'sin-fecha' && !dateRegex.test(date)) {
     redirect('/');
   }
+  // La anticipación mínima no redirige: el checkout muestra el aviso y bloquea el pago.
+  // (Si date=sin-fecha llega hasta acá, el flujo es "a coordinar" y no aplica el plazo.)
 
   let checkoutError: string | null = null;
   const categoriesForCheckout = peopleCategories.length ? peopleCategories : getDefaultPeopleCategories(maxPeoplePerBooking);
@@ -121,13 +125,28 @@ export default async function CheckoutPage({
     checkoutError = 'La selección de pasajeros no es válida. Volvé a intentarlo.';
     pax = normalizePeopleBreakdown({ breakdown: null, categories: categoriesForCheckout });
   }
+  const minLeadHours = getMinLeadHours((paquete as any)?.bookingConfig);
+  if (date !== 'sin-fecha' && minLeadHours > 0 && !isDateBookable(date, minLeadHours)) {
+    const firstBookableDate = formatIsoDateEs(getFirstBookableDateIso(minLeadHours));
+    checkoutError = `La salida elegida ya no cumple la anticipación mínima de ${minLeadHours} hs. Volvé a la excursión y elegí una fecha a partir del ${firstBookableDate}.`;
+  }
+
+  // Adicionales elegidos en el modal (ids separados por coma). Se validan contra el catálogo.
+  const addonCatalog = getPackageAddonOptions(paquete as any);
+  const requestedAddonIds = (addonsParam ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const validAddonIds = requestedAddonIds.filter((id) => addonCatalog.some((addon) => addon.id === id));
+  const addonOptions = addonCatalog.filter((addon) => validAddonIds.includes(addon.id));
+  const addonExtras = getPackageAddonExtraSelections(paquete as any, validAddonIds);
 
   const administrativeFeeExtra = getAdministrativeFeeExtraSelection(paquete);
   const computedPricing = computeReservationPricing(paquete, date, {
     people: safePeople,
     peopleAdults: typeof pax.adults === 'number' ? pax.adults : null,
     peopleMinors: typeof pax.minors === 'number' ? pax.minors : null,
-    selectedExtras: administrativeFeeExtra ? [administrativeFeeExtra] : null,
+    selectedExtras: [...(administrativeFeeExtra ? [administrativeFeeExtra] : []), ...addonExtras],
   });
   const pricing = {
     unitAmountAdults: computedPricing.unitAmountAdults,
@@ -146,6 +165,11 @@ export default async function CheckoutPage({
       pax={pax}
       pricing={pricing}
       initialError={checkoutError}
+      selectedAddons={addonOptions.map((addon) => ({
+        id: addon.id,
+        title: addon.title,
+        amount: Math.round(Number(addon.price) * 100),
+      }))}
     />
   );
 }

@@ -25,8 +25,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { SITE_NAME } from '@/lib/constants';
-import type { ReservationRoomType, ReservationTravelerDetails } from '@/components/landing-reserva/types';
-import { computeReservationPricing, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
+import type { ReservationTravelerDetails } from '@/components/landing-reserva/types';
+import { computeReservationPricing } from '@/lib/packages/resolve-departure';
+import { NationalitySelect } from '@/components/ui/nationality-select';
+import { PhoneWithPrefixInput } from '@/components/ui/phone-with-prefix-input';
+import { DEFAULT_COUNTRY_NAME, applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
 
 type FormState = {
   customerName: string;
@@ -42,7 +45,7 @@ const DEFAULT_FORM_STATE: FormState = {
   customerName: '',
   customerEmail: '',
   customerPhone: '',
-  customerCountry: '',
+  customerCountry: DEFAULT_COUNTRY_NAME,
   customerDocument: '',
   customerBirthDate: '',
   customerComments: '',
@@ -68,12 +71,6 @@ const EMPTY_TRAVELER: TravelerForm = {
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-const ROOM_TYPE_LABELS: Record<ReservationRoomType, string> = {
-  matrimonial: 'Matrimonial',
-  twin: 'Twin',
-  'full-day': 'Full day',
-};
-
 export default function VendorNuevaReservaPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -83,8 +80,6 @@ export default function VendorNuevaReservaPage() {
   const [date, setDate] = useState<string>('sin-fecha');
   const [people, setPeople] = useState(1);
   const [form, setForm] = useState<FormState>(DEFAULT_FORM_STATE);
-  const [pickupPoint, setPickupPoint] = useState('');
-  const [roomType, setRoomType] = useState<ReservationRoomType>('matrimonial');
   const [passengerDetails, setPassengerDetails] = useState<TravelerForm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -178,32 +173,13 @@ export default function VendorNuevaReservaPage() {
     }
   }, [date]);
 
-  const departureConfig = useMemo(
-    () => (selectedPackage ? resolveDepartureConfig(selectedPackage as any, date) : null),
-    [date, selectedPackage]
-  );
-  const pickupPointOptions = useMemo(
-    () =>
-      (departureConfig?.pickupPointsConfig ?? []).filter(
-        (item) => String(item?.label ?? '').trim().length > 0
-      ),
-    [departureConfig?.pickupPointsConfig]
-  );
-  const pickupPointTimes = useMemo(
-    () =>
-      new Map(
-        pickupPointOptions.map((item) => [String(item.label).trim(), String(item.time ?? '').trim() || null])
-      ),
-    [pickupPointOptions]
-  );
   const computedPricing = useMemo(() => {
     if (!selectedPackage) return null;
     return computeReservationPricing(selectedPackage as any, date, {
       people,
-      roomType,
       selectedExtras: [],
     });
-  }, [date, people, roomType, selectedPackage]);
+  }, [date, people, selectedPackage]);
   const currency = String(computedPricing?.displayCurrency ?? selectedPackage?.bookingConfig?.currency ?? 'ars').toUpperCase();
   const amountTotal = useMemo(() => computedPricing?.subtotalAmount ?? 0, [computedPricing]);
   const amountLabel = useMemo(() => {
@@ -218,6 +194,16 @@ export default function VendorNuevaReservaPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleNationalityChange = (countryName: string) => {
+    setForm((prev) => ({
+      ...prev,
+      customerCountry: countryName,
+      customerPhone: applyPhonePrefix(prev.customerPhone, getCountryDialCode(countryName)),
+    }));
+  };
+
+  const selectedDialCode = getCountryDialCode(form.customerCountry) || '+54';
+
   useEffect(() => {
     setPassengerDetails((prev) => {
       const needed = Math.max(0, people - 1);
@@ -225,16 +211,6 @@ export default function VendorNuevaReservaPage() {
       return Array.from({ length: needed }, (_, index) => prev[index] ?? { ...EMPTY_TRAVELER });
     });
   }, [people]);
-
-  useEffect(() => {
-    if (!pickupPointOptions.length) {
-      if (pickupPoint) setPickupPoint('');
-      return;
-    }
-    if (!pickupPoint || !pickupPointOptions.some((item) => item.label === pickupPoint)) {
-      setPickupPoint(String(pickupPointOptions[0]?.label ?? ''));
-    }
-  }, [pickupPoint, pickupPointOptions]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -308,9 +284,6 @@ export default function VendorNuevaReservaPage() {
           customerBirthDate: form.customerBirthDate,
           customerComments: form.customerComments || undefined,
           passengerDetails: sanitizedPassengerDetails,
-          ...(pickupPoint ? { pickupPoint } : {}),
-          ...(pickupPoint ? { pickupPointTime: pickupPointTimes.get(pickupPoint) || null } : {}),
-          roomType,
         }),
       });
 
@@ -447,47 +420,6 @@ export default function VendorNuevaReservaPage() {
 
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-1">
-                        <Label>Lugar de ascenso</Label>
-                        {pickupPointOptions.length > 0 ? (
-                          <>
-                            <Select value={pickupPoint || 'none'} onValueChange={(value) => setPickupPoint(value === 'none' ? '' : value)}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Elegí un ascenso" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Sin ascenso</SelectItem>
-                                {pickupPointOptions.map((item) => (
-                                  <SelectItem key={item.label} value={item.label}>
-                                    {item.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-gray-500">
-                              {pickupPoint ? `Horario: ${pickupPointTimes.get(pickupPoint) || 'A confirmar'}` : 'Sin ascenso definido'}
-                            </p>
-                          </>
-                        ) : (
-                          <Input value="Sin ascensos configurados" readOnly className="bg-gray-50 text-gray-500" />
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Habitación</Label>
-                        <Select value={roomType} onValueChange={(value) => setRoomType(value as ReservationRoomType)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Elegí una opción" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="matrimonial">Matrimonial</SelectItem>
-                            <SelectItem value="twin">Twin</SelectItem>
-                            <SelectItem value="full-day">Full day</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-1">
                         <Label>Nombre del cliente</Label>
                         <Input
                           value={form.customerName}
@@ -509,18 +441,19 @@ export default function VendorNuevaReservaPage() {
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-1">
                         <Label>Teléfono</Label>
-                        <Input
+                        <PhoneWithPrefixInput
                           value={form.customerPhone}
-                          onChange={(e) => handleFormChange('customerPhone', e.target.value)}
-                          placeholder="WhatsApp del cliente"
+                          dialCode={selectedDialCode}
+                          onValueChange={(next) => handleFormChange('customerPhone', next)}
+                          placeholder="11 ..."
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label>País</Label>
-                        <Input
-                          value={form.customerCountry}
-                          onChange={(e) => handleFormChange('customerCountry', e.target.value)}
-                          placeholder="Ej: Argentina, Chile..."
+                        <Label>Nacionalidad</Label>
+                        <NationalitySelect
+                          value={form.customerCountry || DEFAULT_COUNTRY_NAME}
+                          onChange={handleNationalityChange}
+                          placeholder="Seleccioná la nacionalidad"
                         />
                       </div>
                       <div className="space-y-1">
@@ -683,11 +616,6 @@ export default function VendorNuevaReservaPage() {
                     <p className="text-xs uppercase tracking-wide text-gray-500">Fecha</p>
                     <p className="text-sm font-semibold text-gray-900">{formattedDateLabel}</p>
                     <p className="text-xs text-gray-500">Personas: {people}</p>
-                    <p className="text-xs text-gray-500">
-                      Ascenso: {pickupPoint || 'Sin definir'}
-                      {pickupPoint ? ` · ${pickupPointTimes.get(pickupPoint) || 'Horario a confirmar'}` : ''}
-                    </p>
-                    <p className="text-xs text-gray-500">Habitación: {ROOM_TYPE_LABELS[roomType]}</p>
                     <p className="text-xs text-gray-500">
                       Total estimado: {amountTotal > 0 ? amountLabel : '—'}
                     </p>

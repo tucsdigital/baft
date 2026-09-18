@@ -4,6 +4,8 @@ import { normalizePackageCategoryIds } from '@/lib/packages/category-utils';
 import { extractGoogleMapsEmbedUrl } from '@/lib/packages/google-maps';
 import { normalizeExcursionTypeValue, normalizePackageTypes } from '@/lib/packages/package-types';
 import { normalizePeopleCategories } from '@/lib/packages/people-categories';
+import { DEFAULT_MIN_LEAD_HOURS, MAX_MIN_LEAD_HOURS } from '@/lib/packages/booking-rules';
+import { MAX_PACKAGE_ADDONS, packageAddonsSchema } from '@/lib/packages/package-addons';
 import {
   extractPlainTextFromRichText,
   hasMeaningfulRichText,
@@ -97,6 +99,11 @@ export const packageAdminFormSchema = z.object({
   duracion: z.string().min(1, 'La duracion es requerida').max(50, 'La duracion no puede exceder 50 caracteres').transform((val) => val.trim()),
   reservasHabilitadas: z.boolean().transform((val) => Boolean(val)),
   maxPersonasPorReserva: z.number().int('Debes ingresar un numero entero').min(1, 'Minimo 1 persona').max(50, 'Maximo 50 personas'),
+  minLeadHours: z
+    .number()
+    .int('Debes ingresar un numero entero')
+    .min(0, 'Minimo 0 horas (sin anticipacion minima)')
+    .max(MAX_MIN_LEAD_HOURS, `Maximo ${MAX_MIN_LEAD_HOURS} horas`),
   peopleCategories: z.array(peopleCategorySchema).max(10, 'Hay demasiadas categorias').optional().default([]),
   incluye: z.string().optional().default(''),
   visible: z.boolean().transform((val) => Boolean(val)),
@@ -204,6 +211,7 @@ export const packageAdminDefaultValues: PackageAdminFormData = {
   tarifaEspecialFechaLimite: '',
   reservasHabilitadas: true,
   maxPersonasPorReserva: 6,
+  minLeadHours: DEFAULT_MIN_LEAD_HOURS,
   peopleCategories: [
     { key: 'adults', label: 'Adultos', min: 1, max: 6 },
     { key: 'minors', label: 'Menores', min: 0, max: 6 },
@@ -298,6 +306,15 @@ export function buildPackageAdminPayload(args: {
   tagItems: string[];
   noIncludeItems: string[];
   condicionesItems: CondicionItem[];
+  addons: Array<{
+    id: string;
+    title: string;
+    description: string;
+    price: number;
+    image: string;
+    imageKey?: string | null;
+    enabled: boolean;
+  }>;
   salidas: Salida[];
   fechaVencimiento: string;
   imageData: {
@@ -334,6 +351,7 @@ export function buildPackageAdminPayload(args: {
     selectedTransportes,
     noIncludeItems,
     condicionesItems,
+    addons,
     salidas,
     fechaVencimiento,
     imageData,
@@ -392,8 +410,18 @@ export function buildPackageAdminPayload(args: {
       }))
       .filter((item) => item.titulo.length > 0 && item.texto.length > 0),
     salidas: sanitizedSalidas,
-    pickupPointsConfig: [],
-    pickupPoints: [],
+    addons: (Array.isArray(addons) ? addons : [])
+      .map((item) => ({
+        id: String((item as any)?.id ?? '').trim(),
+        title: String((item as any)?.title ?? '').trim(),
+        description: String((item as any)?.description ?? '').trim(),
+        price: Math.max(0, Number((item as any)?.price ?? 0) || 0),
+        image: String((item as any)?.image ?? '').trim(),
+        imageKey: String((item as any)?.imageKey ?? '').trim() || null,
+        enabled: (item as any)?.enabled !== false,
+      }))
+      .filter((item) => Boolean(item.id) && Boolean(item.title) && item.price > 0)
+      .slice(0, MAX_PACKAGE_ADDONS),
     seatSelectionEnabled: false,
     seatLayoutId: null,
     bookingConfig: {
@@ -410,6 +438,9 @@ export function buildPackageAdminPayload(args: {
         price: Math.max(0, Number(salida.precio ?? 0) || 0),
       })),
       maxPeoplePerBooking: Math.max(1, Number(data.maxPersonasPorReserva) || 1),
+      minLeadHours: Number.isFinite(Number(data.minLeadHours))
+        ? Math.max(0, Math.min(MAX_MIN_LEAD_HOURS, Math.floor(Number(data.minLeadHours))))
+        : DEFAULT_MIN_LEAD_HOURS,
       currency: bookingCurrency,
       depositAmount: Math.max(0, Number(existingBookingConfig?.depositAmount ?? 0) || 0),
       paymentMethods: {

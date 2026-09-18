@@ -29,7 +29,7 @@ export default function SchemaOrg() {
       addressCountry: 'AR',
     },
     sameAs: [
-      SOCIAL_MEDIA.facebook,
+      // SOCIAL_MEDIA.facebook,
       SOCIAL_MEDIA.instagram,
       SOCIAL_MEDIA.threads,
       SOCIAL_MEDIA.whatsapp,
@@ -69,7 +69,7 @@ export default function SchemaOrg() {
       addressCountry: 'AR',
     },
     sameAs: [
-      SOCIAL_MEDIA.facebook,
+      // SOCIAL_MEDIA.facebook,
       SOCIAL_MEDIA.instagram,
       SOCIAL_MEDIA.threads,
       SOCIAL_MEDIA.whatsapp,

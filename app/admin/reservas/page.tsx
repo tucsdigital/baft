@@ -716,19 +716,18 @@ export default function ReservasPage() {
           <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Ventas</h1>
-              <p className="text-sm text-gray-500">Compras, confirmaciones, vouchers, emails y operación por paquete/fecha</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button asChild variant="outline" size="sm">
+              {/* <Button asChild variant="outline" size="sm">
                 <Link href="/admin/ventas/buscar">Búsqueda avanzada</Link>
-              </Button>
+              </Button> */}
               <Button asChild variant="success" size="sm">
                 <Link href="/admin/ventas/nueva">Crear venta manual</Link>
               </Button>
             </div>
           </header>
 
-          <section className="grid gap-3 sm:grid-cols-3">
+          {/* <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-4">
               <p className="text-[11px] uppercase tracking-widest text-gray-500">Total vendido</p>
               <p className="mt-2 text-2xl font-semibold text-gray-900">{formatAmount(totalAmount, 'ARS')}</p>
@@ -754,7 +753,7 @@ export default function ReservasPage() {
                 ))}
               </div>
             </div>
-          </section>
+          </section> */}
 
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-emerald-500/20 p-4">

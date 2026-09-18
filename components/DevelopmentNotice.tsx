@@ -96,14 +96,14 @@ export default function DevelopmentNotice() {
       className: "bg-black text-white hover:bg-black/90",
       icon: <ThreadsIcon />,
     },
-    {
-      key: "facebook",
-      href: SOCIAL_MEDIA.facebook,
-      label: "Facebook",
-      ariaLabel: "Seguinos en Facebook",
-      className: "bg-[#1877F2] text-white hover:bg-[#1565D8]",
-      icon: <FacebookIcon />,
-    },
+    // {
+    //   key: "facebook",
+    //   href: SOCIAL_MEDIA.facebook,
+    //   label: "Facebook",
+    //   ariaLabel: "Seguinos en Facebook",
+    //   className: "bg-[#1877F2] text-white hover:bg-[#1565D8]",
+    //   icon: <FacebookIcon />,
+    // },
     {
       key: "tiktok",
       href: SOCIAL_MEDIA.tiktok,

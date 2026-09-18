@@ -1,7 +1,6 @@
 import type {
   CartCurrency,
   Paquete,
-  PickupPointItem,
   ReservationExtraCode,
   ReservationExtraSelection,
   Salida,
@@ -24,8 +23,6 @@ export type ResolvedDepartureConfig = {
   maxPeople: number;
   seatsEnabled: boolean;
   seatLayoutId: string | null;
-  pickupPoints: string[];
-  pickupPointsConfig: PickupPointItem[];
 };
 
 export type ReservationPricingMode = 'fixed' | 'percent';
@@ -72,8 +69,8 @@ const EXTRA_LABELS: Record<ReservationExtraCode, string> = {
   cocheCama: 'Coche cama',
   panoramicos: 'Panorámicos',
   cafeteras: 'Cafeteras',
-  pickupPoint: 'Lugar de ascenso',
   administrativeFee: 'Gastos Administrativos',
+  packageAddon: 'Adicional',
 };
 
 function normalizeText(value: unknown): string {
@@ -97,48 +94,10 @@ function normalizeDate(value: string): string {
   return next || 'sin-fecha';
 }
 
-function normalizePickupPoints(paquete: Paquete): string[] {
-  return getPickupPointItems(paquete).map((item) => item.label);
-}
-
-function normalizePickupPointItem(raw: any): PickupPointItem | null {
-  const label = String(raw?.label ?? '').trim();
-  if (!label) return null;
-  return {
-    label,
-    time: String(raw?.time ?? '').trim(),
-    hasExtra: Boolean(raw?.hasExtra),
-    extraAmount: typeof raw?.extraAmount === 'number' ? Math.max(0, Number(raw.extraAmount) || 0) : 0,
-  };
-}
-
 function normalizeAmenityConfig(value: any) {
   return {
     enabled: Boolean(value?.enabled),
     amount: typeof value?.amount === 'number' ? Math.max(0, Number(value.amount) || 0) : 0,
-  };
-}
-
-export function getPickupPointItems(paquete: Paquete): PickupPointItem[] {
-  const config = (paquete as any).pickupPointsConfig;
-  if (Array.isArray(config)) {
-    return config.map((item: any) => normalizePickupPointItem(item)).filter(Boolean) as PickupPointItem[];
-  }
-  if (!Array.isArray(paquete.pickupPoints)) return [];
-  return paquete.pickupPoints
-    .map((point) => normalizePickupPointItem({ label: point, time: '09:00', hasExtra: false, extraAmount: 0 }))
-    .filter(Boolean) as PickupPointItem[];
-}
-
-export function getPickupPointExtraSelection(paquete: Paquete, pickupPoint: string): ReservationExtraSelection | null {
-  const point = getPickupPointItems(paquete).find((item) => item.label === pickupPoint);
-  if (!point || !point.hasExtra || !point.extraAmount || point.extraAmount <= 0) return null;
-  return {
-    code: 'pickupPoint',
-    label: `${EXTRA_LABELS.pickupPoint}: ${point.label}`,
-    amount: toAmountCents(point.extraAmount),
-    source: 'pickupPoint',
-    scope: 'per_person',
   };
 }
 
@@ -155,11 +114,72 @@ export function getAdministrativeFeeExtraSelection(paquete: Paquete): Reservatio
   };
 }
 
+/** Normaliza los adicionales configurados en el paquete (solo habilitados y con datos válidos). */
+export function getPackageAddonOptions(paquete: Paquete): Array<{
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  price: number;
+  enabled: boolean;
+}> {
+  const raw = (paquete as any)?.addons;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const options: Array<{ id: string; title: string; description: string; image: string; price: number; enabled: boolean }> = [];
+  for (const item of raw) {
+    const id = String((item as any)?.id ?? '').trim();
+    const title = String((item as any)?.title ?? (item as any)?.titulo ?? '').trim();
+    const price = Math.max(0, Number((item as any)?.price ?? (item as any)?.precio ?? 0) || 0);
+    const enabled = (item as any)?.enabled !== false;
+    if (!id || !title || price <= 0 || !enabled || seen.has(id)) continue;
+    seen.add(id);
+    options.push({
+      id,
+      title,
+      description: String((item as any)?.description ?? (item as any)?.descripcion ?? '').trim(),
+      image: String((item as any)?.image ?? (item as any)?.imagen ?? '').trim(),
+      price,
+      enabled,
+    });
+  }
+  return options;
+}
+
+/**
+ * Convierte adicionales elegidos por el cliente en selecciones de extras tarifables.
+ * Los adicionales se cobran una sola vez por reserva (scope per_booking) y se validan
+ * contra el catálogo del paquete: ids desconocidos, deshabilitados o con precio
+ * cambiado se ignoran/recalculan del lado servidor.
+ */
+export function getPackageAddonExtraSelections(
+  paquete: Paquete,
+  addonIds: Array<string> | null | undefined
+): ReservationExtraSelection[] {
+  const requested = new Set(
+    Array.isArray(addonIds) ? addonIds.map((id) => String(id ?? '').trim()).filter(Boolean) : []
+  );
+  if (requested.size === 0) return [];
+  const catalog = new Map(getPackageAddonOptions(paquete).map((option) => [option.id, option]));
+  const selections: ReservationExtraSelection[] = [];
+  for (const id of requested) {
+    const option = catalog.get(id);
+    if (!option) continue;
+    selections.push({
+      code: 'packageAddon',
+      label: option.title,
+      amount: toAmountCents(option.price),
+      source: `packageAddon:${option.id}`,
+      scope: 'per_booking',
+    });
+  }
+  return selections;
+}
+
 export function getSeatLayoutExtraOptions(template: Pick<SeatLayoutTemplate, 'amenities'> | null | undefined): ReservationExtraSelection[] {
   const amenities = (template?.amenities ?? {}) as SeatLayoutAmenities;
   const options: ReservationExtraSelection[] = [];
   (['cocheCama', 'panoramicos', 'cafeteras'] as ReservationExtraCode[]).forEach((code) => {
-    if (code === 'pickupPoint') return;
     const config = normalizeAmenityConfig((amenities as any)?.[code]);
     if (!config.enabled || !config.amount || config.amount <= 0) return;
     options.push({
@@ -175,8 +195,8 @@ export function getSeatLayoutExtraOptions(template: Pick<SeatLayoutTemplate, 'am
 
 export function resolveReservationExtraSelections(params: {
   paquete: Paquete;
-  pickupPoint?: string | null;
   selectedExtraCodes?: Array<string | ReservationExtraCode> | null;
+  addonIds?: Array<string> | null;
   seatLayoutTemplate?: Pick<SeatLayoutTemplate, 'amenities'> | null;
 }): ReservationExtraSelection[] {
   const requested = new Set(
@@ -185,14 +205,10 @@ export function resolveReservationExtraSelections(params: {
       : []
   );
   const selections: ReservationExtraSelection[] = [];
-  const pickupPoint = String(params.pickupPoint ?? '').trim();
-  if (pickupPoint) {
-    const pickupExtra = getPickupPointExtraSelection(params.paquete, pickupPoint);
-    if (pickupExtra) selections.push(pickupExtra);
-  }
   getSeatLayoutExtraOptions(params.seatLayoutTemplate).forEach((option) => {
     if (requested.has(option.code)) selections.push(option);
   });
+  getPackageAddonExtraSelections(params.paquete, params.addonIds).forEach((option) => selections.push(option));
   const administrativeFeeExtra = getAdministrativeFeeExtraSelection(params.paquete);
   if (administrativeFeeExtra) selections.push(administrativeFeeExtra);
   return selections;
@@ -255,7 +271,6 @@ export function computeReservationPricing(paquete: Paquete, rawDate: string, inp
   depositPercentAdults?: number | null;
   depositPercentMinors?: number | null;
   selectedExtras?: ReservationExtraSelection[] | null;
-  roomType?: string | null;
 }): ComputedReservationPricing {
   const departure = resolveDepartureConfig(paquete, rawDate);
   const adultsRaw = typeof input?.peopleAdults === 'number' ? Math.max(0, Math.floor(input!.peopleAdults)) : null;
@@ -426,7 +441,5 @@ export function resolveDepartureConfig(paquete: Paquete, rawDate: string): Resol
     maxPeople,
     seatsEnabled,
     seatLayoutId,
-    pickupPoints: normalizePickupPoints(paquete),
-    pickupPointsConfig: getPickupPointItems(paquete),
   };
 }

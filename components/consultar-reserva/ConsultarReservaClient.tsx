@@ -25,8 +25,6 @@ type PublicReservation = {
   departureDate: string;
   people: number;
   selectedSeats: string[] | null;
-  pickupPoint: string | null;
-  pickupPointTime: string | null;
   selectedExtras: Array<{ code: string; label: string; amount: number }>;
   amountTotal: number;
   currency: string;
@@ -207,13 +205,6 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
                   <div className="text-xs uppercase tracking-wide text-gray-500">Pago</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.paymentStatusLabel || reservation.paymentStatus}</div>
                   <div className="text-xs text-gray-600">{formatCurrency(reservation.amountTotal, reservation.currency)}</div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Ascenso</div>
-                  <div className="mt-1 font-semibold text-gray-900">
-                    {reservation.pickupPoint || '—'}
-                  </div>
-                  <div className="text-xs text-gray-600">{reservation.pickupPointTime || 'Horario a confirmar'}</div>
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wide text-gray-500">Extras</div>

@@ -117,6 +117,50 @@ function formatAmount(amountTotal: number, currency: string): string {
   return `$ ${value.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * Desglose de precios para emails y snapshots: subtotal base + cada extra
+ * (adicionales, gastos administrativos) con su monto efectivo según scope.
+ */
+function buildPriceBreakdown(input: {
+  rawExtras: any;
+  baseSubtotalAmount: unknown;
+  people: number;
+  currency: string;
+  peopleLabel: string;
+}): {
+  baseSubtotalLabel?: string;
+  extrasItems?: Array<{ label: string; amountFormatted: string }>;
+  selectedExtras: any[] | null;
+  extrasTotalAmount?: number | null;
+} {
+  const rawExtras = Array.isArray(input.rawExtras) ? input.rawExtras : [];
+  const people = Math.max(1, Math.floor(input.people) || 1);
+  let extrasCents = 0;
+  const extrasItems: Array<{ label: string; amountFormatted: string }> = [];
+  for (const extra of rawExtras) {
+    const label = String(extra?.label ?? '').trim();
+    const amount = Math.max(0, Number(extra?.amount ?? 0) || 0);
+    const scope = String(extra?.scope ?? 'per_person');
+    if (!label || amount <= 0) continue;
+    const effective = scope === 'per_booking' ? amount : amount * people;
+    extrasCents += effective;
+    extrasItems.push({ label, amountFormatted: formatAmount(effective, input.currency) });
+  }
+
+  const baseSubtotalAmount =
+    typeof input.baseSubtotalAmount === 'number' && input.baseSubtotalAmount > 0 ? Number(input.baseSubtotalAmount) : null;
+  const hasBreakdown = Boolean(baseSubtotalAmount) || extrasItems.length > 0;
+
+  return {
+    ...(baseSubtotalAmount
+      ? { baseSubtotalLabel: `${formatAmount(baseSubtotalAmount, input.currency)} (${input.peopleLabel || `${people} pasajeros`})` }
+      : {}),
+    ...(extrasItems.length > 0 ? { extrasItems } : {}),
+    selectedExtras: rawExtras.length > 0 ? rawExtras : null,
+    ...(hasBreakdown ? { extrasTotalAmount: extrasCents } : {}),
+  };
+}
+
 function formatDate(date: string): string {
   if (!date || date === 'sin-fecha') return 'A coordinar';
   try {
@@ -133,13 +177,11 @@ function formatDate(date: string): string {
 
 function computeVoucherNextAttemptAt(params: {
   date: string;
-  pickupPointTime?: string | null;
   now: Timestamp;
 }): Timestamp {
   const date = String(params.date ?? '').trim();
-  const time = String(params.pickupPointTime ?? '').trim();
   if (!date || date === 'sin-fecha') return params.now;
-  const hhmm = /^\d{2}:\d{2}$/.test(time) ? time : '09:00';
+  const hhmm = '09:00';
   const ts = new Date(`${date}T${hhmm}:00-03:00`).getTime();
   if (!Number.isFinite(ts) || ts <= 0) return params.now;
   const dueMs = ts - 48 * 60 * 60 * 1000;
@@ -326,6 +368,10 @@ export async function POST(request: Request) {
       const customerBirthDate =
         (orderData?.customer?.birthDate ? String(orderData.customer.birthDate) : '') ||
         (intentData.customerBirthDate ? String(intentData.customerBirthDate) : '') ||
+        null;
+      const customerCountry =
+        (orderData?.customer?.country ? String(orderData.customer.country) : '') ||
+        (intentData.customerCountry ? String(intentData.customerCountry) : '') ||
         null;
       const passengerDetails = Array.isArray(orderData?.passengerDetails)
         ? orderData.passengerDetails
@@ -580,7 +626,6 @@ export async function POST(request: Request) {
             const holdId = it.holdId ? String(it.holdId) : null;
             const cartItemId = String(it.cartItemId || it.id || `idx_${idx}`);
             const referralCode = String(it.referralCode || intentData.referral?.code || '');
-            const pickupPointTime = (it as any).pickupPointTime ? String((it as any).pickupPointTime).trim() : null;
 
             if (!packageId || !people || people < 1) continue;
 
@@ -591,6 +636,13 @@ export async function POST(request: Request) {
             const peopleLabel = people === 1 ? '1 persona' : `${people} personas`;
             const amountFormatted = formatAmount(amountTotalItem || (paymentInfo.transaction_amount ? Math.round(paymentInfo.transaction_amount * 100) : 0), currency);
             const dateFormatted = formatDate(date);
+            const itemPriceBreakdown = buildPriceBreakdown({
+              rawExtras: (it as any).selectedExtras ?? intentData.selectedExtras,
+              baseSubtotalAmount: (it as any).baseSubtotalAmount ?? intentData.baseSubtotalAmount,
+              people,
+              currency,
+              peopleLabel,
+            });
 
             const reservationId = orderId ? `ord_${orderId}_${cartItemId}` : `mp_${paymentId}_${cartItemId}`;
             const reservaRef = doc(db, 'reservas', reservationId);
@@ -666,15 +718,14 @@ export async function POST(request: Request) {
                   ? (it as any).selectedSeats.map((s: any) => String(s)).join(', ')
                   : undefined,
                 amountFormatted,
+                ...itemPriceBreakdown,
                 reservationCode,
                 lookupUrl,
                 sessionId: reservationId,
                 customerEmail: customerEmail || '',
                 customerPhone: customerPhone || undefined,
-                customerCountry: undefined,
+                customerCountry: customerCountry || undefined,
                 customerComments: intentComments || undefined,
-                pickupPoint: (it as any).pickupPoint ? String((it as any).pickupPoint) : null,
-                pickupPointTime,
               };
               const htmlConfirm = buildClienteCompraConfirmadaHtml(emailData);
               const textConfirm = buildClienteCompraConfirmadaText(emailData);
@@ -682,7 +733,7 @@ export async function POST(request: Request) {
               const textVoucher = buildClienteVoucher48hsText(emailData);
               const htmlAdmin = buildAdminNuevaReservaHtml(emailData);
               const textAdmin = buildAdminNuevaReservaText(emailData);
-              const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, pickupPointTime, now });
+              const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, now });
               const shouldQueueVoucher = Boolean(date && date !== 'sin-fecha');
 
               queueSet(reservaRef, {
@@ -699,9 +750,6 @@ export async function POST(request: Request) {
                 people,
                 peopleAdults: typeof (it as any).peopleAdults === 'number' ? Number((it as any).peopleAdults) : null,
                 peopleMinors: typeof (it as any).peopleMinors === 'number' ? Number((it as any).peopleMinors) : null,
-                pickupPoint: (it as any).pickupPoint ? String((it as any).pickupPoint) : null,
-                pickupPointTime,
-                roomType: (it as any).roomType ? String((it as any).roomType) : null,
                 seatLayoutId:
                   (typeof (it as any).seatLayoutId === 'string' ? String((it as any).seatLayoutId).trim() : '') ||
                   (pkg ? resolveDepartureConfig(pkg, date).seatLayoutId : null),
@@ -712,6 +760,14 @@ export async function POST(request: Request) {
                 unitAmountMinors: unitAmountMinors !== null ? unitAmountMinors : null,
                 depositPercentAdults: depositPercentAdults !== null ? depositPercentAdults : null,
                 depositPercentMinors: depositPercentMinors !== null ? depositPercentMinors : null,
+                selectedExtras: itemPriceBreakdown.selectedExtras,
+                baseSubtotalAmount:
+                  typeof (it as any).baseSubtotalAmount === 'number'
+                    ? Number((it as any).baseSubtotalAmount)
+                    : typeof intentData.baseSubtotalAmount === 'number'
+                      ? Number(intentData.baseSubtotalAmount)
+                      : null,
+                extrasTotalAmount: itemPriceBreakdown.extrasTotalAmount ?? null,
                 amountTotal: amountTotalItem || Math.round(paymentInfo.transaction_amount * 100),
                 currency: currency || paymentInfo.currency_id || 'ars',
                 paymentMethod: 'mercadopago',
@@ -727,7 +783,7 @@ export async function POST(request: Request) {
                 customerNameLower: (customerName || '').trim().toLowerCase() || null,
                 customerPhone: customerPhone || null,
                 customerPhoneNormalized: normalizeDigits(customerPhone),
-                customerCountry: payer?.address?.country || null,
+                customerCountry: customerCountry || payer?.address?.country || null,
                 customerDocument: customerDocument || null,
                 customerDocumentNormalized: normalizeDigits(customerDocument),
                 customerBirthDate,
@@ -746,6 +802,13 @@ export async function POST(request: Request) {
                         : null,
                   people,
                   amountTotal: amountTotalItem || (paymentInfo.transaction_amount ? Math.round(paymentInfo.transaction_amount * 100) : 0),
+                  baseSubtotalAmount:
+                    typeof (it as any).baseSubtotalAmount === 'number'
+                      ? Number((it as any).baseSubtotalAmount)
+                      : typeof intentData.baseSubtotalAmount === 'number'
+                        ? Number(intentData.baseSubtotalAmount)
+                        : null,
+                  extrasTotalAmount: itemPriceBreakdown.extrasTotalAmount ?? null,
                   currency: currency || paymentInfo.currency_id || 'ars',
                   paymentMethod: 'mercadopago',
                 }),
@@ -1166,6 +1229,7 @@ export async function POST(request: Request) {
       customerEmail: intentEmail,
       customerName: intentName,
       customerPhone: intentPhone,
+      customerCountry: intentCountry,
       customerDocument: intentDocument,
       customerBirthDate: intentBirthDate,
       customerComments: intentComments,
@@ -1192,12 +1256,20 @@ export async function POST(request: Request) {
     const customerPhone = payer?.phone?.number || intentPhone || '';
     const customerDocument = payer?.identification?.number || intentDocument || '';
     const customerBirthDate = intentBirthDate ? String(intentBirthDate) : null;
+    const customerCountry = (intentCountry ? String(intentCountry) : '') || payer?.address?.country || null;
     const passengerDetails = Array.isArray(intentPassengerDetails) ? intentPassengerDetails : null;
 
     // Preparar datos para emails
     const amountFormatted = formatAmount(amountTotal || paymentInfo.transaction_amount * 100, currency || 'ars');
     const dateFormatted = formatDate(date);
     const peopleLabel = people === 1 ? '1 persona' : `${people} personas`;
+    const priceBreakdown = buildPriceBreakdown({
+      rawExtras: (intentData as any).selectedExtras,
+      baseSubtotalAmount: (intentData as any).baseSubtotalAmount,
+      people,
+      currency: currency || 'ars',
+      peopleLabel,
+    });
 
     const reservationId = `mp_${paymentId}`;
     const reservationCode = generateReservationCode(reservationId, Date.now());
@@ -1212,15 +1284,14 @@ export async function POST(request: Request) {
       dateFormatted,
       peopleLabel,
       amountFormatted,
+      ...priceBreakdown,
       reservationCode,
       lookupUrl,
       sessionId: String(paymentId),
       customerEmail: customerEmail || '',
       customerPhone: customerPhone || undefined,
-      customerCountry: undefined,
+      customerCountry: customerCountry || undefined,
       customerComments: intentComments || undefined,
-      pickupPoint: null,
-      pickupPointTime: null,
     };
 
     const htmlConfirm = buildClienteCompraConfirmadaHtml(emailData);
@@ -1273,7 +1344,7 @@ export async function POST(request: Request) {
           }
         }
 
-        const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, pickupPointTime: null, now });
+        const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, now });
         const shouldQueueVoucher = Boolean(date && date !== 'sin-fecha');
 
         // Calcular código de reserva a partir de la lectura del contador
@@ -1338,7 +1409,6 @@ export async function POST(request: Request) {
             experienceTitle: finalPackageTitle,
             date,
             people,
-            roomType: intentData.roomType ? String(intentData.roomType) : null,
             selectedExtras: Array.isArray((intentData as any).selectedExtras) ? (intentData as any).selectedExtras : null,
             baseSubtotalAmount:
               typeof (intentData as any).baseSubtotalAmount === 'number'
@@ -1363,7 +1433,7 @@ export async function POST(request: Request) {
             customerNameLower: (customerName || '').trim().toLowerCase() || null,
             customerPhone: customerPhone || null,
             customerPhoneNormalized: normalizeDigits(customerPhone),
-            customerCountry: payer?.address?.country || null,
+            customerCountry: customerCountry || null,
             customerDocument: customerDocument || null,
             customerDocumentNormalized: normalizeDigits(customerDocument),
             customerBirthDate,

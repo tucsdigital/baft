@@ -13,6 +13,10 @@ type ReservaEmailData = {
   peopleLabel: string;
   seatsLabel?: string;
   amountFormatted: string;
+  /** Etiqueta del subtotal base, ej: "$ 660.000 (2 pasajeros)". */
+  baseSubtotalLabel?: string;
+  /** Desglose de extras/adicionales (adicionales, gastos administrativos, etc.). */
+  extrasItems?: Array<{ label: string; amountFormatted: string }>;
   reservationCode?: string;
   lookupUrl?: string;
   sessionId: string;
@@ -20,9 +24,34 @@ type ReservaEmailData = {
   customerPhone?: string;
   customerCountry?: string;
   customerComments?: string;
-  pickupPoint?: string | null;
-  pickupPointTime?: string | null;
 };
+
+const PRICE_ROW_STYLE = 'padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;';
+const PRICE_VALUE_STYLE = 'padding: 10px 0; font-size: 0.9375rem; font-weight: 700; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;';
+
+/** Filas del desglose (subtotal + extras) para insertar antes del monto total. */
+function buildPriceBreakdownRowsHtml(data: Pick<ReservaEmailData, 'baseSubtotalLabel' | 'extrasItems'>): string {
+  const rows: string[] = [];
+  if (data.baseSubtotalLabel) {
+    rows.push(`<tr><td style="${PRICE_ROW_STYLE}">Subtotal</td><td style="${PRICE_VALUE_STYLE}">${data.baseSubtotalLabel}</td></tr>`);
+  }
+  for (const extra of data.extrasItems ?? []) {
+    if (!extra.label) continue;
+    rows.push(
+      `<tr><td style="${PRICE_ROW_STYLE}">+ ${extra.label}</td><td style="${PRICE_VALUE_STYLE}">${extra.amountFormatted}</td></tr>`
+    );
+  }
+  return rows.join('');
+}
+
+function buildPriceBreakdownLinesText(data: Pick<ReservaEmailData, 'baseSubtotalLabel' | 'extrasItems'>): string[] {
+  const lines: string[] = [];
+  if (data.baseSubtotalLabel) lines.push(`Subtotal: ${data.baseSubtotalLabel}`);
+  for (const extra of data.extrasItems ?? []) {
+    if (extra.label) lines.push(`+ ${extra.label}: ${extra.amountFormatted}`);
+  }
+  return lines;
+}
 
 export function buildClienteCompraConfirmadaHtml(data: ReservaEmailData): string {
   const {
@@ -90,6 +119,7 @@ export function buildClienteCompraConfirmadaHtml(data: ReservaEmailData): string
           </tr>`
               : ''
           }
+          ${buildPriceBreakdownRowsHtml(data)}
           <tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Monto</td>
             <td style="padding: 10px 0; font-size: 1rem; font-weight: 800; color: #059669; text-align: right; border-bottom: 1px solid #e2e8f0;">${amountFormatted}</td>
@@ -153,6 +183,7 @@ export function buildClienteCompraConfirmadaText(data: ReservaEmailData): string
     `Fecha: ${dateFormatted}`,
     `Pasajeros: ${peopleLabel}`,
     ...(seatsLabel ? [`Butacas: ${seatsLabel}`] : []),
+    ...buildPriceBreakdownLinesText(data),
     `Monto: ${amountFormatted}`,
     `Código: ${reservationCode || sessionId}`,
     '',
@@ -172,13 +203,11 @@ export function buildClienteVoucher48hsHtml(data: ReservaEmailData): string {
     reservationCode,
     lookupUrl,
     sessionId,
-    pickupPoint,
-    pickupPointTime,
   } = data;
   const saludo = customerName ? `Hola ${customerName},` : 'Hola,';
   const code = reservationCode || sessionId;
-  const hora = pickupPointTime && /^\d{2}:\d{2}$/.test(String(pickupPointTime)) ? String(pickupPointTime) : 'A confirmar';
-  const punto = pickupPoint ? String(pickupPoint) : 'A confirmar';
+  const hora = 'A confirmar';
+  const punto = 'A confirmar';
   const whatsappUrl = `https://wa.me/${CONTACT_INFO.whatsapp}?text=${encodeURIComponent(
     `Hola ${SITE_NAME}, mi salida para ${experienceTitle} es el ${dateFormatted} a las ${hora}. Punto: ${punto}. ¿Me confirman cualquier detalle?`
   )}`;
@@ -297,10 +326,10 @@ export function buildClienteVoucher48hsHtml(data: ReservaEmailData): string {
 }
 
 export function buildClienteVoucher48hsText(data: ReservaEmailData): string {
-  const { customerName, experienceTitle, dateFormatted, peopleLabel, seatsLabel, amountFormatted, sessionId, reservationCode, pickupPoint, pickupPointTime, lookupUrl } = data;
+  const { customerName, experienceTitle, dateFormatted, peopleLabel, seatsLabel, amountFormatted, sessionId, reservationCode, lookupUrl } = data;
   const saludo = customerName ? `Hola ${customerName},` : 'Hola,';
-  const hora = pickupPointTime && /^\d{2}:\d{2}$/.test(String(pickupPointTime)) ? String(pickupPointTime) : 'A confirmar';
-  const punto = pickupPoint ? String(pickupPoint) : 'A confirmar';
+  const hora = 'A confirmar';
+  const punto = 'A confirmar';
   return [
     `RECORDATORIO DE SALIDA (48 HS ANTES) - ${SITE_NAME}`,
     '',
@@ -506,7 +535,16 @@ export function buildAdminNuevaReservaHtml(data: ReservaEmailData): string {
     `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Fecha</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827; text-transform: capitalize;">${dateFormatted}</td></tr>`,
     `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Personas</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${peopleLabel}</td></tr>`,
     ...(seatsLabel ? [`<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Butacas</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${seatsLabel}</td></tr>`] : []),
-    `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Monto</td><td style="padding: 10px 14px; font-size: 0.875rem; font-weight: 600; color: #111827;">${amountFormatted}</td></tr>`,
+    ...(data.baseSubtotalLabel
+      ? [`<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Subtotal</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${data.baseSubtotalLabel}</td></tr>`]
+      : []),
+    ...(data.extrasItems ?? [])
+      .filter((extra) => extra.label)
+      .map(
+        (extra) =>
+          `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">+ ${extra.label}</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${extra.amountFormatted}</td></tr>`
+      ),
+    `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Monto total</td><td style="padding: 10px 14px; font-size: 0.875rem; font-weight: 700; color: #111827;">${amountFormatted}</td></tr>`,
     `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Cliente</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${customerName || '—'}</td></tr>`,
     `<tr><td style="padding: 10px 14px; font-size: 0.875rem; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Email</td><td style="padding: 10px 14px; font-size: 0.875rem; color: #111827;">${customerEmail}</td></tr>`,
   ];
@@ -573,7 +611,8 @@ export function buildAdminNuevaReservaText(data: ReservaEmailData): string {
     `Fecha: ${dateFormatted}`,
     `Personas: ${peopleLabel}`,
     ...(seatsLabel ? [`Butacas: ${seatsLabel}`] : []),
-    `Monto: ${amountFormatted}`,
+    ...buildPriceBreakdownLinesText(data),
+    `Monto total: ${amountFormatted}`,
     '',
     `Cliente: ${customerName || '—'}`,
     `Email: ${customerEmail}`,

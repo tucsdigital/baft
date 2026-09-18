@@ -43,9 +43,6 @@ const bodySchema = z.object({
   customerBirthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   customerComments: z.string().max(500).optional(),
   passengerDetails: z.array(travelerSchema).max(49).optional(),
-  roomType: z.enum(['matrimonial', 'twin', 'full-day']).optional(),
-  pickupPoint: z.string().max(120).optional(),
-  pickupPointTime: z.string().max(20).nullable().optional(),
   selectedExtraCodes: z.array(z.enum(['cocheCama', 'panoramicos', 'cafeteras'])).max(10).optional(),
   status: reservationStatusEnum.optional(),
 }).superRefine((data, ctx) => {
@@ -59,15 +56,6 @@ const bodySchema = z.object({
     });
   }
 });
-
-function resolvePickupPointTime(paquete: any, pickupPoint: string, rawTime?: string | null): string | null {
-  const incoming = String(rawTime ?? '').trim();
-  if (incoming) return incoming;
-  const config = Array.isArray(paquete?.pickupPointsConfig) ? paquete.pickupPointsConfig : [];
-  const found = config.find((item: any) => String(item?.label ?? '').trim() === pickupPoint);
-  const time = found ? String(found?.time ?? '').trim() : '';
-  return time || null;
-}
 
 async function getVendorForUser(auth: Auth, request: Request) {
   const header = request.headers.get('authorization') ?? '';
@@ -153,10 +141,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const pickupPoint = typeof payload.pickupPoint === 'string' ? payload.pickupPoint.trim() : '';
-    const pickupPointTime = pickupPoint
-      ? resolvePickupPointTime(paquete, pickupPoint, payload.pickupPointTime ?? null)
-      : null;
     const selectedExtraCodes = Array.isArray(payload.selectedExtraCodes)
       ? Array.from(new Set(payload.selectedExtraCodes.map((code) => String(code).trim()).filter(Boolean)))
       : [];
@@ -170,13 +154,11 @@ export async function POST(request: Request) {
     }
     const selectedExtras = resolveReservationExtraSelections({
       paquete,
-      pickupPoint: pickupPoint || null,
       selectedExtraCodes,
       seatLayoutTemplate: seatLayoutTemplateForExtras,
     });
     const repriced = computeReservationPricing(paquete, payload.date, {
       people: payload.people,
-      roomType: payload.roomType ?? null,
       selectedExtras,
     });
     const currency = (repriced.currency ?? 'ars').toLowerCase() as 'ars' | 'brl' | 'usd';
@@ -268,9 +250,6 @@ export async function POST(request: Request) {
         slug: packageSlug,
         title: paquete.titulo,
       },
-      pickupPoint: pickupPoint || null,
-      pickupPointTime,
-      roomType: payload.roomType ?? null,
       selectedExtras: selectedExtras.length ? selectedExtras : null,
       customerBirthDate: payload.customerBirthDate,
       passengerDetails: payload.passengerDetails ?? [],

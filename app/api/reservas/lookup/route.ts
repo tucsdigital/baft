@@ -156,9 +156,6 @@ export async function POST(request: Request) {
       departureDate,
       people,
       selectedSeats,
-      pickupPoint: reserva.pickupPoint ? String(reserva.pickupPoint) : null,
-      pickupPointTime: reserva.pickupPointTime ? String(reserva.pickupPointTime) : null,
-      roomType: reserva.roomType ? String(reserva.roomType) : null,
       selectedExtras: Array.isArray((reserva as any).selectedExtras)
         ? (reserva as any).selectedExtras.map((item: any) => ({
             code: String(item?.code ?? ''),

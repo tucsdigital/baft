@@ -8,8 +8,9 @@ import { addMinutes, computeBaseCapacity, getAvailableForPackageDate, getHeldPeo
 import { orderExternalReference } from '@/lib/orders';
 import { getSeatDepartureId, seatIdsFromLabels } from '@/lib/seats/server';
 import type { SeatLayoutTemplate } from '@/types';
-import { computeReservationPricing, getAdministrativeFeeExtraSelection, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
+import { computeReservationPricing, getAdministrativeFeeExtraSelection, getPackageAddonExtraSelections, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
 import { getPeopleBreakdownTotal, normalizePeopleBreakdown, normalizePeopleCategories } from '@/lib/packages/people-categories';
+import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 
 export const runtime = 'nodejs';
 
@@ -30,12 +31,13 @@ const payloadSchema = z.object({
   date: z.string().optional(),
   people: z.number().int().min(1).max(50).optional(),
   peopleBreakdown: z.record(z.string(), z.number().int().min(0).max(50)).optional(),
+  addonIds: z.array(z.string().min(1).max(80)).max(20).optional(),
   customerEmail: z.string().email().optional(),
   customerName: z.string().max(200).optional(),
   customerPhone: z.string().max(50).optional(),
+  customerCountry: z.string().max(60).optional(),
   customerDocument: z.string().max(50).optional(),
   customerBirthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  roomType: z.enum(['matrimonial', 'twin', 'full-day']).optional(),
   customerComments: z.string().max(500).optional(),
   passengerDetails: z.array(travelerDetailsSchema).max(50).optional(),
   successUrl: z.string().url().optional(),
@@ -210,6 +212,18 @@ function withQueryParams(url: string, params: Record<string, string | number | n
   }
 }
 
+/**
+ * Regla de anticipación mínima (ej: 48 hs): devuelve el mensaje de error
+ * cuando la fecha elegida no cumple el plazo configurado para el paquete.
+ */
+function leadTimeError(paquete: { bookingConfig?: { minLeadHours?: number } | null }, date: string): string | null {
+  if (!date || date === 'sin-fecha') return null;
+  const minLeadHours = getMinLeadHours(paquete.bookingConfig);
+  if (isDateBookable(date, minLeadHours)) return null;
+  const firstBookableDate = formatIsoDateEs(getFirstBookableDateIso(minLeadHours));
+  return `Las reservas se realizan con un mínimo de ${minLeadHours} hs de anticipación. Elegí una fecha a partir del ${firstBookableDate}.`;
+}
+
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
     return NextResponse.json({ error: 'Origen no autorizado.' }, { status: 403 });
@@ -238,9 +252,9 @@ export async function POST(request: Request) {
     customerEmail,
     customerName,
     customerPhone,
+    customerCountry,
     customerDocument,
     customerBirthDate,
-    roomType,
     customerComments,
     successUrl: bodySuccessUrl,
     failureUrl: bodyFailureUrl,
@@ -398,6 +412,10 @@ export async function POST(request: Request) {
         if (!departureConfig.enabled) {
           return NextResponse.json({ error: 'Hay fechas no habilitadas en el carrito. Volvé al carrito para actualizar.' }, { status: 400 });
         }
+        const leadError = leadTimeError(pkg, date);
+        if (leadError) {
+          return NextResponse.json({ error: leadError }, { status: 400 });
+        }
       }
 
       const holdId = String(it.holdId || '');
@@ -440,7 +458,6 @@ export async function POST(request: Request) {
         peopleMinors,
         depositPercentAdults,
         depositPercentMinors,
-        roomType: typeof (it as any).roomType === 'string' ? String((it as any).roomType) : null,
         selectedExtras: Array.isArray((it as any).selectedExtras) ? (it as any).selectedExtras : null,
       });
       if (computedPricing.pricingMode === 'percent' && computedPricing.baseUnitAmount < 1) {
@@ -525,9 +542,6 @@ export async function POST(request: Request) {
         people,
         peopleAdults: computedPricing.peopleAdults,
         peopleMinors: computedPricing.peopleMinors,
-        pickupPoint: (it as any).pickupPoint ? String((it as any).pickupPoint) : null,
-        pickupPointTime: (it as any).pickupPointTime ? String((it as any).pickupPointTime) : null,
-        roomType: typeof (it as any).roomType === 'string' ? String((it as any).roomType) : null,
         selectedExtras: Array.isArray((it as any).selectedExtras) ? (it as any).selectedExtras : null,
         unitAmount,
         pricingMode: computedPricing.pricingMode,
@@ -611,6 +625,7 @@ export async function POST(request: Request) {
           email: customerEmail ?? null,
           name: customerName ?? null,
           phone: customerPhone ?? null,
+          country: customerCountry ?? null,
           document: customerDocument ?? null,
           birthDate: customerBirthDate ?? null,
           comments: customerComments ?? null,
@@ -637,6 +652,7 @@ export async function POST(request: Request) {
         customerEmail: customerEmail ?? null,
         customerName: customerName ?? null,
         customerPhone: customerPhone ?? null,
+        customerCountry: customerCountry ?? null,
         customerDocument: customerDocument ?? null,
         customerBirthDate: customerBirthDate ?? null,
         customerComments: customerComments ?? null,
@@ -842,6 +858,10 @@ export async function POST(request: Request) {
     if (!departureConfig.enabled) {
       return NextResponse.json({ error: 'La fecha seleccionada no está habilitada.' }, { status: 400 });
     }
+    const leadError = leadTimeError(paquete, date);
+    if (leadError) {
+      return NextResponse.json({ error: leadError }, { status: 400 });
+    }
     const available = await getAvailableForPackageDate(paquete, date);
     if (people > available) {
       return NextResponse.json(
@@ -859,7 +879,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const directSelectedExtras = [getAdministrativeFeeExtraSelection(paquete)].filter(
+  const directSelectedExtras = [
+    getAdministrativeFeeExtraSelection(paquete),
+    ...getPackageAddonExtraSelections(paquete, (parsed.data as any).addonIds),
+  ].filter(
     (item): item is NonNullable<ReturnType<typeof getAdministrativeFeeExtraSelection>> => Boolean(item)
   );
   const peopleAdults =
@@ -870,7 +893,6 @@ export async function POST(request: Request) {
     people,
     peopleAdults,
     peopleMinors,
-    roomType: roomType ?? null,
     selectedExtras: directSelectedExtras,
   });
   const unitPrice = computedPricing.unitAmount;
@@ -987,6 +1009,9 @@ export async function POST(request: Request) {
     holdExpiresAt,
     unitPrice,
     selectedExtras: directSelectedExtras.length ? directSelectedExtras : null,
+    addonIds: Array.isArray((parsed.data as any).addonIds)
+      ? (parsed.data as any).addonIds.map((id: unknown) => String(id ?? '').trim()).filter(Boolean)
+      : null,
     baseSubtotalAmount: computedPricing.baseSubtotalAmount,
     extrasTotalAmount: computedPricing.extrasTotalAmount,
     amountTotal: sessionAmount,
@@ -994,9 +1019,9 @@ export async function POST(request: Request) {
     customerEmail: customerEmail ?? null,
     customerName: customerName ?? null,
     customerPhone: customerPhone ?? null,
+    customerCountry: customerCountry ?? null,
     customerDocument: customerDocument ?? null,
     customerBirthDate: customerBirthDate ?? null,
-    roomType: roomType ?? null,
     customerComments: customerComments ?? null,
     passengerDetails: passengerDetails ?? null,
     externalReference,
