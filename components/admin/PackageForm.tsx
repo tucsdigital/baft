@@ -803,7 +803,7 @@ export default function PackageForm(props: Props) {
               {errors.maxPersonasPorReserva && <p className="text-base text-red-500 mt-1">{errors.maxPersonasPorReserva.message}</p>}
             </div>
 
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            {/* <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <Label htmlFor="minLeadHours">Anticipación mínima de reserva (horas)</Label>
               <Controller
                 name="minLeadHours"
@@ -827,7 +827,7 @@ export default function PackageForm(props: Props) {
                 momento.
               </p>
               {errors.minLeadHours && <p className="text-base text-red-500 mt-1">{errors.minLeadHours.message}</p>}
-            </div>
+            </div> */}
 
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
