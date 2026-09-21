@@ -26,7 +26,7 @@ import type {
 } from '@/components/landing-reserva/types';
 import type { Vendor, ReferralLink } from '@/types/vendor';
 import type { DepartureSeat, Paquete, SeatLayoutTemplate } from '@/types';
-import { getVendors, getReferralLinksByVendor } from '@/lib/vendors';
+import { getVendors, getReferralLinksByVendor, getVendorByEmail } from '@/lib/vendors';
 import { getAllPaquetesAdmin } from '@/lib/paquetes';
 import { NationalitySelect } from '@/components/ui/nationality-select';
 import { PhoneWithPrefixInput } from '@/components/ui/phone-with-prefix-input';
@@ -44,6 +44,25 @@ import { Checkbox } from '@/components/ui/checkbox';
 
 type Props = {
   paquetes: Paquete[];
+  hideReferral?: boolean;
+  hideVendorSelect?: boolean;
+  hideStatus?: boolean;
+  hideOverbook?: boolean;
+  apiEndpoint?: string;
+  successRedirect?: string;
+  initialData?: {
+    packageId?: string;
+    date?: string;
+    peopleAdults?: number;
+    peopleMinors?: number;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerDocument?: string;
+    customerBirthDate?: string;
+    customerComments?: string;
+    selectedExtraCodes?: string[];
+  };
 };
 
 type FormState = {
@@ -112,19 +131,40 @@ const statusOptions: { value: ReservationStatus; label: string }[] = [
   { value: 'completed', label: 'Completada' },
 ];
 
-export default function AdminReservaForm({ paquetes }: Props) {
+export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSelect, hideStatus, hideOverbook, apiEndpoint, successRedirect, initialData }: Props) {
   const router = useRouter();
   const { user } = useAuth();
   const [selectedPackageId, setSelectedPackageId] = useState<string>(
-    paquetes[0]?.id ?? ''
+    initialData?.packageId ?? paquetes[0]?.id ?? ''
   );
-  const [date, setDate] = useState<string>('sin-fecha');
-  const [adults, setAdults] = useState(1);
-  const [minors, setMinors] = useState(0);
+  const [date, setDate] = useState<string>(initialData?.date ?? 'sin-fecha');
+  const [adults, setAdults] = useState<number>(() => {
+    const val = initialData?.peopleAdults;
+    return typeof val === 'number' && val > 0 ? val : 1;
+  });
+  const [minors, setMinors] = useState<number>(() => {
+    const val = initialData?.peopleMinors;
+    return typeof val === 'number' && val > 0 ? val : 0;
+  });
   const peopleTotal = useMemo(() => Math.max(0, (Number(adults) || 0) + (Number(minors) || 0)), [adults, minors]);
   const [depositPercentAdults, setDepositPercentAdults] = useState<string>('');
   const [depositPercentMinors, setDepositPercentMinors] = useState<string>('');
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM_STATE);
+  const [form, setForm] = useState<FormState>(() => {
+    if (initialData?.customerName) {
+      const parts = String(initialData.customerName).trim().split(/\s+/);
+      return {
+        ...DEFAULT_FORM_STATE,
+        customerFirstName: parts[0] ?? '',
+        customerLastName: parts.slice(1).join(' ') ?? '',
+        customerEmail: initialData.customerEmail ?? '',
+        customerPhone: initialData.customerPhone ?? '',
+        customerDocument: initialData.customerDocument ?? '',
+        customerBirthDate: initialData.customerBirthDate ?? '',
+        customerComments: initialData.customerComments ?? '',
+      };
+    }
+    return DEFAULT_FORM_STATE;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<ReservationStatus>('reserved');
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
@@ -141,7 +181,7 @@ export default function AdminReservaForm({ paquetes }: Props) {
   const [seatLoading, setSeatLoading] = useState(false);
   const [seatData, setSeatData] = useState<{ template: SeatLayoutTemplate; seats: DepartureSeat[] } | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
-  const [selectedExtraCodes, setSelectedExtraCodes] = useState<string[]>([]);
+  const [selectedExtraCodes, setSelectedExtraCodes] = useState<string[]>(initialData?.selectedExtraCodes ?? []);
   /**
    * Adicionales elegidos (del paquete actual o importados de otras
    * excursiones): se envían como `manualExtras` con precio fijado, así no
@@ -174,6 +214,7 @@ export default function AdminReservaForm({ paquetes }: Props) {
   }, [selectedPackageId, date]);
 
   useEffect(() => {
+    if (hideVendorSelect) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -190,6 +231,7 @@ export default function AdminReservaForm({ paquetes }: Props) {
   }, []);
 
   useEffect(() => {
+    if (hideReferral) return;
     let cancelled = false;
     const loadLinks = async () => {
       if (!vendorId) {
@@ -227,6 +269,22 @@ export default function AdminReservaForm({ paquetes }: Props) {
     const exists = referralLinksForPackage.some((link) => link.code === selectedReferralCode);
     if (!exists) setSelectedReferralCode('');
   }, [referralLinksForPackage, selectedReferralCode, vendorId]);
+
+  // Asignación automática de vendor en modo vendedor (hideVendorSelect)
+  useEffect(() => {
+    if (!hideVendorSelect || !user || !user.email || vendorId) return;
+    const load = async () => {
+      try {
+        const email = user.email;
+        if (!email) return;
+        const vendor = await getVendorByEmail(email);
+        if (vendor) setVendorId(vendor.id);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+  }, [hideVendorSelect, user, vendorId]);
 
   const dateOptions = useMemo<string[]>(() => {
     if (!selectedPaquete) return [];
@@ -563,8 +621,8 @@ export default function AdminReservaForm({ paquetes }: Props) {
     setSubmitting(true);
     try {
       const token = await user.getIdToken();
-      const response = await fetch('/api/admin/reservas', {
-        method: 'POST',
+      const response = await fetch(apiEndpoint || '/api/admin/reservas', {
+        method: initialData ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -574,8 +632,8 @@ export default function AdminReservaForm({ paquetes }: Props) {
           date,
           peopleAdults: Math.max(0, Number(adults) || 0),
           peopleMinors: Math.max(0, Number(minors) || 0),
-          status,
-          allowOverbook: Boolean(allowOverbook),
+          ...(!hideStatus ? { status } : {}),
+          ...(!hideOverbook ? { allowOverbook: Boolean(allowOverbook) } : {}),
           customerEmail: form.customerEmail,
           customerName: `${form.customerFirstName.trim()} ${form.customerLastName.trim()}`.trim(),
           customerPhone: form.customerPhone || undefined,
@@ -603,16 +661,16 @@ export default function AdminReservaForm({ paquetes }: Props) {
                   url: item.url,
                   name: item.name,
                   type: item.type,
-                  uploadedBy: 'admin',
+                  uploadedBy: hideVendorSelect ? 'vendor' : 'admin',
                 })),
               }
             : {}),
           ...(vendorId ? { vendorId } : {}),
-          ...(manualReferralCode.trim()
+          ...(!hideReferral && (manualReferralCode.trim()
             ? { referralCode: manualReferralCode.trim() }
             : selectedReferralCode.trim()
               ? { referralCode: selectedReferralCode.trim() }
-              : {}),
+              : {})),
         }),
       });
 
@@ -624,7 +682,7 @@ export default function AdminReservaForm({ paquetes }: Props) {
 
       const payload = await response.json();
       toast.success('Reserva creada exitosamente');
-      router.push(`/admin/ventas/${payload.id}`);
+      router.push(successRedirect ? successRedirect.replace(':id', payload.id) : `/admin/ventas/${payload.id}`);
     } catch (error) {
       console.error('[AdminReservaForm] Error creando reserva:', error);
       toast.error(error instanceof Error && error.message ? error.message : 'No pudimos crear la reserva, revisá los datos e intentá otra vez');
@@ -680,18 +738,20 @@ export default function AdminReservaForm({ paquetes }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label>Estado</Label>
-                  <Select value={status} onValueChange={(value) => setStatus(value as ReservationStatus)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {!hideStatus && (
+                    <Select value={status} onValueChange={(value) => setStatus(value as ReservationStatus)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -1060,74 +1120,76 @@ export default function AdminReservaForm({ paquetes }: Props) {
                 </div>
               </section>
 
-              <section className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">03 · Referidos (opcional)</span>
-                  <div className="h-px flex-1 bg-gray-100" />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1">
-                <Select
-                  value={vendorId || 'none'}
-                  onValueChange={(value) => {
-                    setVendorId(value === 'none' ? '' : value);
-                    setSelectedReferralCode('');
-                    setManualReferralCode('');
-                  }}
-                >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Seleccioná un vendedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                    <SelectItem value="none">Sin vendedor</SelectItem>
-                        {vendors.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            {v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {!hideReferral && !hideVendorSelect && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">03 · Referidos (opcional)</span>
+                    <div className="h-px flex-1 bg-gray-100" />
                   </div>
-                  <div className="space-y-1">
-                    <Select
-                      value={selectedReferralCode || 'none'}
-                      onValueChange={(value) => {
-                        setSelectedReferralCode(value === 'none' ? '' : value);
-                        setManualReferralCode('');
-                      }}
-                      disabled={!vendorId || referralLinksForPackage.length === 0}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Elegí un código del vendedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Sin código</SelectItem>
-                        {referralLinksForPackage.length === 0 ? (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1">
+                  <Select
+                    value={vendorId || 'none'}
+                    onValueChange={(value) => {
+                      setVendorId(value === 'none' ? '' : value);
+                      setSelectedReferralCode('');
+                      setManualReferralCode('');
+                    }}
+                  >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Seleccioná un vendedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                      <SelectItem value="none">Sin vendedor</SelectItem>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.id} value={v.id}>
+                              {v.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Select
+                        value={selectedReferralCode || 'none'}
+                        onValueChange={(value) => {
+                          setSelectedReferralCode(value === 'none' ? '' : value);
+                          setManualReferralCode('');
+                        }}
+                        disabled={!vendorId || referralLinksForPackage.length === 0}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Elegí un código del vendedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin código</SelectItem>
+                          {referralLinksForPackage.length === 0 ? (
                       <SelectItem value="__no_codes__" disabled>
                             Sin códigos disponibles
                           </SelectItem>
-                        ) : (
-                          referralLinksForPackage.map((l) => (
-                            <SelectItem key={l.id} value={l.code}>
-                              {l.code} {l.experienceName ? `· ${l.experienceName}` : ''}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                          ) : (
+                            referralLinksForPackage.map((l) => (
+                              <SelectItem key={l.id} value={l.code}>
+                                {l.code} {l.experienceName ? `· ${l.experienceName}` : ''}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="o ingresá un código manual"
+                        value={manualReferralCode}
+                        onChange={(e) => {
+                          setManualReferralCode(e.target.value);
+                          if (e.target.value.trim()) setSelectedReferralCode('');
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Input
-                      placeholder="o ingresá un código manual"
-                      value={manualReferralCode}
-                      onChange={(e) => {
-                        setManualReferralCode(e.target.value);
-                        if (e.target.value.trim()) setSelectedReferralCode('');
-                      }}
-                    />
-                  </div>
-                </div>
-              </section>
+                </section>
+              )}
 
               {passengerDetails.length > 0 ? (
                 <section className="space-y-3 rounded-2xl bg-gray-50 p-4">

@@ -111,7 +111,7 @@ export function getAdministrativeFeeExtraSelection(paquete: Paquete): Reservatio
     label: EXTRA_LABELS.administrativeFee,
     amount,
     source: 'package',
-    scope: 'per_booking',
+    scope: 'per_person',
   };
 }
 
@@ -149,7 +149,7 @@ export function getPackageAddonOptions(paquete: Paquete): Array<{
 
 /**
  * Convierte adicionales elegidos por el cliente en selecciones de extras tarifables.
- * Los adicionales se cobran una sola vez por reserva (scope per_booking) y se validan
+ * Los adicionales se cobran por pasajero (scope per_person) y se validan
  * contra el catálogo del paquete: ids desconocidos, deshabilitados o con precio
  * cambiado se ignoran/recalculan del lado servidor.
  */
@@ -171,7 +171,7 @@ export function getPackageAddonExtraSelections(
       label: option.title,
       amount: toAmountCents(option.price),
       source: `packageAddon:${option.id}`,
-      scope: 'per_booking',
+      scope: 'per_person',
     });
   }
   return selections;
@@ -226,7 +226,7 @@ export function resolveReservationExtraSelections(params: {
         label,
         amount: toAmountCents(amount),
         source: 'manualExtra',
-        scope: extra?.perPerson ? 'per_person' : 'per_booking',
+        scope: 'per_person',
       });
     }
   }

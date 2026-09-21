@@ -4,7 +4,7 @@ import { adminAuth } from '@/lib/firebaseAdmin';
 import type { Auth } from 'firebase-admin/auth';
 import { db } from '@/lib/firebase';
 import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
-import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { getPaqueteById } from '@/lib/paquetes';
 import { createReserva } from '@/lib/reservas';
 import { getStockDisponible, registrarMovimientoStock } from '@/lib/stock';
@@ -292,6 +292,75 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: reservaId });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'No se pudo guardar la reserva';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  if (!adminAuth) {
+    return NextResponse.json(
+      {
+        error:
+          'Firebase Admin no está configurado. Define FIREBASE_SERVICE_ACCOUNT en .env.local con el JSON del Service Account.',
+      },
+      { status: 500 }
+    );
+  }
+  const AUTH = adminAuth as Auth;
+
+  let vendor;
+  try {
+    vendor = await getVendorForUser(AUTH, request);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Autenticación inválida';
+    return NextResponse.json({ error: msg }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const reservationId = body.reservationId;
+  if (!reservationId) {
+    return NextResponse.json({ error: 'reservationId obligatorio' }, { status: 400 });
+  }
+
+  const reservaSnap = await getDoc(doc(db, 'reservas', reservationId));
+  if (!reservaSnap.exists()) {
+    return NextResponse.json({ error: 'Reserva no encontrada' }, { status: 404 });
+  }
+  const reserva = reservaSnap.data() as any;
+  if (reserva.referredBy?.vendorId !== vendor.id) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+  }
+
+  const updates: Record<string, any> = {
+    updatedAt: Timestamp.now(),
+  };
+  if (body.date !== undefined) updates.date = body.date;
+  if (body.customerName !== undefined) updates.customerName = body.customerName;
+  if (body.customerEmail !== undefined) updates.customerEmail = body.customerEmail;
+  if (body.customerPhone !== undefined) updates.customerPhone = body.customerPhone;
+  if (body.customerDocument !== undefined) updates.customerDocument = body.customerDocument;
+  if (body.customerBirthDate !== undefined) updates.customerBirthDate = body.customerBirthDate;
+  if (body.customerComments !== undefined) updates.customerComments = body.customerComments;
+  if (body.people !== undefined) updates.people = body.people;
+  if (body.peopleAdults !== undefined) updates.peopleAdults = body.peopleAdults;
+  if (body.peopleMinors !== undefined) updates.peopleMinors = body.peopleMinors;
+  if (body.selectedExtraCodes !== undefined) {
+    const paquete = await getPaqueteById(reserva.packageId ?? reserva.experienceId);
+    if (paquete) {
+      const extras = resolveReservationExtraSelections({
+        paquete,
+        selectedExtraCodes: body.selectedExtraCodes,
+      });
+      updates.selectedExtras = extras;
+      updates.extrasTotalAmount = extras.reduce((sum, e) => sum + e.amount, 0);
+    }
+  }
+
+  try {
+    await updateDoc(doc(db, 'reservas', reservationId), updates);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'No se pudo actualizar la reserva';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
