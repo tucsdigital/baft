@@ -82,10 +82,6 @@ export function buildClienteCompraConfirmadaHtml(data: ReservaEmailData): string
 </head>
 <body style="margin:0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background:#f8fafc; padding: 24px;">
   <div style="max-width: 600px; margin: 0 auto; background:#fff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e2e8f0;">
-    <div style="background: linear-gradient(135deg, #0B6E4F 0%, #16A34A 100%); padding: 32px 28px; text-align: center;">
-      <h1 style="margin:0 0 8px; font-size: 1.75rem; font-weight: 800; color: #fff; letter-spacing: -0.02em;">${SITE_NAME}</h1>
-      <p style="margin:0; font-size: 0.9375rem; color: rgba(255,255,255,0.9);">${SITE_DESCRIPTION}</p>
-    </div>
 
     <div style="padding: 32px 28px;">
       <div style="text-align: center; margin-bottom: 28px;">
@@ -111,14 +107,13 @@ export function buildClienteCompraConfirmadaHtml(data: ReservaEmailData): string
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Pasajeros</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 700; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${peopleLabel}</td>
           </tr>
-          ${
-            seatsLabel
-              ? `<tr>
+          ${seatsLabel
+      ? `<tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Butacas</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 700; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${seatsLabel}</td>
           </tr>`
-              : ''
-          }
+      : ''
+    }
           ${buildPriceBreakdownRowsHtml(data)}
           <tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Monto</td>
@@ -138,17 +133,16 @@ export function buildClienteCompraConfirmadaHtml(data: ReservaEmailData): string
         </p>
       </div>
 
-      ${
-        lookupUrl
-          ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #e2e8f0;">
+      ${lookupUrl
+      ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #e2e8f0;">
         <p style="margin:0 0 8px; font-size: 0.875rem; font-weight: 800; color: #0f172a;">Consultar tu reserva</p>
         <a href="${lookupUrl}" style="display:inline-block; background:#0B6E4F; color:#fff; padding:10px 14px; border-radius: 8px; text-decoration:none; font-weight: 800; font-size: 0.875rem;">
           Ver estado
         </a>
         <p style="margin:12px 0 0; font-size: 0.75rem; color:#64748b; word-break: break-word;">${lookupUrl}</p>
       </div>`
-          : ''
-      }
+      : ''
+    }
 
       <div style="background:#0f172a; border-radius: 12px; padding: 16px; color: #fff;">
         <p style="margin:0 0 8px; font-size: 0.875rem; font-weight: 800;">¿Necesitás ayuda?</p>
@@ -266,14 +260,13 @@ export function buildClienteVoucher48hsHtml(data: ReservaEmailData): string {
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Pasajeros</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 800; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${peopleLabel}</td>
           </tr>
-          ${
-            seatsLabel
-              ? `<tr>
+          ${seatsLabel
+      ? `<tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Butacas</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 800; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${seatsLabel}</td>
           </tr>`
-              : ''
-          }
+      : ''
+    }
           <tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Monto</td>
             <td style="padding: 10px 0; font-size: 1rem; font-weight: 900; color: #059669; text-align: right; border-bottom: 1px solid #e2e8f0;">${amountFormatted}</td>
@@ -285,17 +278,16 @@ export function buildClienteVoucher48hsHtml(data: ReservaEmailData): string {
         </table>
       </div>
 
-      ${
-        lookupUrl
-          ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #e2e8f0;">
+      ${lookupUrl
+      ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #e2e8f0;">
         <p style="margin:0 0 8px; font-size: 0.875rem; font-weight: 800; color: #0f172a;">Consultar tu reserva</p>
         <a href="${lookupUrl}" style="display:inline-block; background:#0B6E4F; color:#fff; padding:10px 14px; border-radius: 8px; text-decoration:none; font-weight: 800; font-size: 0.875rem;">
           Ver estado
         </a>
         <p style="margin:12px 0 0; font-size: 0.75rem; color:#64748b; word-break: break-word;">${lookupUrl}</p>
       </div>`
-          : ''
-      }
+      : ''
+    }
 
       <div style="background:#fff; border: 2px solid #0B6E4F; border-radius: 12px; padding: 16px; margin-bottom: 18px;">
         <p style="margin:0 0 8px; font-size: 0.875rem; font-weight: 900; color: #0B6E4F; text-transform: uppercase; letter-spacing: 0.05em;">Importante</p>
@@ -376,10 +368,6 @@ export function buildClienteReservaConfirmadaHtml(data: ReservaEmailData): strin
 <body style="margin:0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background:#f8fafc; padding: 24px;">
   <div style="max-width: 600px; margin: 0 auto; background:#fff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e2e8f0;">
     <!-- Header con marca -->
-    <div style="background: linear-gradient(135deg, #0B6E4F 0%, #16A34A 100%); padding: 32px 28px; text-align: center;">
-      <h1 style="margin:0 0 8px; font-size: 1.75rem; font-weight: 800; color: #fff; letter-spacing: -0.02em;">${SITE_NAME}</h1>
-      <p style="margin:0; font-size: 0.9375rem; color: rgba(255,255,255,0.9);">${SITE_DESCRIPTION}</p>
-    </div>
     
     <div style="padding: 32px 28px;">
       <!-- Título de confirmación -->
@@ -410,14 +398,13 @@ export function buildClienteReservaConfirmadaHtml(data: ReservaEmailData): strin
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Cantidad de pasajeros</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 600; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${peopleLabel}</td>
           </tr>
-          ${
-            seatsLabel
-              ? `<tr>
+          ${seatsLabel
+      ? `<tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Butacas</td>
             <td style="padding: 10px 0; font-size: 0.9375rem; font-weight: 600; color: #0f172a; text-align: right; border-bottom: 1px solid #e2e8f0;">${seatsLabel}</td>
           </tr>`
-              : ''
-          }
+      : ''
+    }
           <tr>
             <td style="padding: 10px 0; font-size: 0.875rem; color: #64748b; border-bottom: 1px solid #e2e8f0;">Monto abonado</td>
             <td style="padding: 10px 0; font-size: 1rem; font-weight: 700; color: #059669; text-align: right; border-bottom: 1px solid #e2e8f0;">${amountFormatted}</td>
@@ -429,9 +416,8 @@ export function buildClienteReservaConfirmadaHtml(data: ReservaEmailData): strin
         </table>
       </div>
 
-      ${
-        lookupUrl
-          ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid #e2e8f0;">
+      ${lookupUrl
+      ? `<div style="background:#f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid #e2e8f0;">
         <p style="margin:0 0 8px; font-size: 0.875rem; font-weight: 700; color: #0f172a;">Consultar estado de reserva</p>
         <p style="margin:0 0 12px; font-size: 0.875rem; color: #475569; line-height: 1.6;">
           Guardá tu código y consultá el estado cuando lo necesites desde nuestra web.
@@ -441,8 +427,8 @@ export function buildClienteReservaConfirmadaHtml(data: ReservaEmailData): strin
         </a>
         <p style="margin:12px 0 0; font-size: 0.75rem; color:#64748b; word-break: break-word;">${lookupUrl}</p>
       </div>`
-          : ''
-      }
+      : ''
+    }
 
       <!-- Próximos pasos -->
       <div style="background:#fff; border: 2px solid #0B6E4F; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
@@ -479,7 +465,7 @@ export function buildClienteReservaConfirmadaText(data: ReservaEmailData): strin
   const whatsappUrl = `https://wa.me/${CONTACT_INFO.whatsapp}?text=${encodeURIComponent(
     `Hola ${SITE_NAME}, confirmé mi reserva para ${experienceTitle}. Fecha: ${dateFormatted}. ${peopleLabel}. ¿Próximos pasos?`
   )}`;
-  
+
   return [
     `================================`,
     `VOUCHER DE RESERVA - ${SITE_NAME}`,

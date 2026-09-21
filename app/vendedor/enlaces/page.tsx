@@ -98,20 +98,14 @@ export default function VendorEnlacesPage() {
     });
   }, [links, statusFilter, packageFilter]);
 
-  const availablePackages = useMemo(() => {
-    const taken = new Set(links.map(l => l.experienceId).filter(Boolean) as string[]);
-    const list = packages.filter(e => !taken.has(e.id));
-    return list;
-  }, [packages, links]);
-
   const filteredCreatePackages = useMemo(() => {
-    if (!searchTerm) return availablePackages;
+    if (!searchTerm) return packages;
     const lower = searchTerm.toLowerCase();
-    return availablePackages.filter(e => 
-      e.title.toLowerCase().includes(lower) || 
+    return packages.filter(e =>
+      e.title.toLowerCase().includes(lower) ||
       e.slug.toLowerCase().includes(lower)
     );
-  }, [availablePackages, searchTerm]);
+  }, [packages, searchTerm]);
 
   const nf = (currency: 'ARS' | 'BRL' | 'USD') =>
     new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 2 });
@@ -186,8 +180,8 @@ export default function VendorEnlacesPage() {
   };
 
   const openCreateDialog = () => {
-    if (availablePackages.length === 0) {
-      toast.info('Ya tenés enlaces para todas las excursiones habilitadas');
+    if (packages.length === 0) {
+      toast.info('No hay excursiones disponibles');
       return;
     }
     setSelectedPackageId('');
@@ -311,7 +305,7 @@ export default function VendorEnlacesPage() {
             <h1 className="text-lg font-semibold text-gray-900">Mis enlaces</h1>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={exportCsv}>Exportar CSV</Button>
-              <Button onClick={openCreateDialog} className="gap-2" disabled={availablePackages.length === 0}>
+              <Button onClick={openCreateDialog} className="gap-2" disabled={packages.length === 0}>
                 <Plus className="h-4 w-4" />
                 Nuevo enlace
               </Button>
