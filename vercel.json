@@ -5,16 +5,6 @@
       "memory": 1024
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/email",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-reservation-holds",
-      "schedule": "*/10 * * * *"
-    }
-  ],
   "regions": ["gru1"]
 }
 

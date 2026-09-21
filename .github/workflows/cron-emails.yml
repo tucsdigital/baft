@@ -1,0 +1,16 @@
+name: Cron - Emails
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar endpoint de emails pendientes
+        run: |
+          curl -s -X GET "${{ secrets.VERCEL_URL }}/api/cron/email" \
+            -H "Content-Type: application/json" \
+            || echo "ERROR: Fallo al llamar /api/cron/email"

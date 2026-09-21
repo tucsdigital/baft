@@ -1,0 +1,17 @@
+name: Cron - Limpiar Holds
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup-holds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar endpoint de limpieza de holds
+        run: |
+          curl -s -X POST "${{ secrets.VERCEL_URL }}/api/cron/cleanup-reservation-holds" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            || echo "ERROR: Fallo al llamar /api/cron/cleanup-reservation-holds"
