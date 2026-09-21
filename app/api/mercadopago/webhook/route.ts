@@ -427,6 +427,30 @@ export async function POST(request: Request) {
         }
       }
 
+      // Guard: evitar enviar emails duplicados si el pago ya fue procesado
+      // (Mercado Pago puede reenviar la misma notificación por timeout).
+      if (cartId) {
+        const cartDupSnap = await getDoc(cartRef);
+        if (cartDupSnap.exists()) {
+          const cartProcessed = Array.isArray(cartDupSnap.data()?.processedPaymentIds)
+            ? cartDupSnap.data().processedPaymentIds.map(String)
+            : [];
+          if (cartProcessed.includes(String(paymentId))) {
+            await recordMPNotification({
+              notificationId,
+              type: notification.type,
+              action: notification.action,
+              paymentId: String(paymentId),
+              externalReference,
+              status: 'ignored',
+              reason: 'payment_already_processed',
+              reservationId: orderId || null,
+            });
+            return NextResponse.json({ received: true });
+          }
+        }
+      }
+
       // Envío inmediato de emails (no depende del cron): se preparan los
       // cuerpos por item usando su propio código y se envían con Resend.
       // Si el envío funciona, el job se guarda como "sent"; si no, queda
