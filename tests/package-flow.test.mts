@@ -40,7 +40,7 @@ test('rechaza URLs que no son de Google Maps', () => {
   assert.equal(isGoogleMapsEmbedUrl('https://example.com/mapa'), false);
 });
 
-test('filtra la disponibilidad al mes actual y siguiente', () => {
+test('filtra la disponibilidad excluyendo fechas pasadas', () => {
   const baseDate = new Date('2026-08-03T12:00:00');
   const filtered = filterAvailabilityToBookingWindow(
     [
@@ -53,7 +53,7 @@ test('filtra la disponibilidad al mes actual y siguiente', () => {
 
   assert.deepEqual(
     filtered.map((item) => item.date),
-    ['2026-08-05', '2026-09-10']
+    ['2026-08-05', '2026-09-10', '2026-10-02']
   );
 });
 

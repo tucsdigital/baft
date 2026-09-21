@@ -163,8 +163,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     () =>
       addonOptions
         .filter((addon) => selectedAddonIds.includes(addon.id))
-        .reduce((sum, addon) => sum + Math.max(0, Number(addon.price) || 0), 0),
-    [addonOptions, selectedAddonIds]
+        .reduce((sum, addon) => sum + Math.max(0, Number(addon.price) || 0) * people, 0),
+    [addonOptions, selectedAddonIds, people]
   );
 
   const toggleAddon = (id: string) => {

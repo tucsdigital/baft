@@ -32,7 +32,7 @@ export default function BookingAddonsStep({ addons, selectedIds, onToggle, curre
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
-          Hacé tu experiencia aún mejor. Se cobran una sola vez por reserva.
+          Hacé tu experiencia aún mejor. Se cobran por pasajero.
         </p>
         {selectedSet.size > 0 ? (
           <motion.div

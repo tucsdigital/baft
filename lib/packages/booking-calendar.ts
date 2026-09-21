@@ -41,18 +41,16 @@ export function filterAvailabilityToBookingWindow(
   entries: BookingAvailabilityItem[],
   baseDate = new Date()
 ) {
-  const monthKeys = new Set(buildBookingWindowMonths(baseDate).map((item) => `${item.year}-${item.month}`));
   const todayIso = toIsoDate(baseDate);
-  return entries.filter((entry) => {
-    const parsed = new Date(`${entry.date}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return false;
-    if (!monthKeys.has(`${parsed.getFullYear()}-${parsed.getMonth()}`)) return false;
-    // Las fechas pasadas nunca se muestran como disponibles.
-    // Las fechas "muy próximas" (dentro de la anticipación mínima) NO se filtran acá:
-    // se conservan para mostrarlas bloqueadas en el calendario con su aviso.
-    if (entry.date < todayIso) return false;
-    return true;
-  });
+  return entries
+    .filter((entry) => {
+      const parsed = new Date(`${entry.date}T00:00:00`);
+      if (Number.isNaN(parsed.getTime())) return false;
+      // Las fechas pasadas nunca se muestran como disponibles.
+      if (entry.date < todayIso) return false;
+      return true;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function getMaxSelectablePeople(available: number, maxPeoplePerBooking: number) {
