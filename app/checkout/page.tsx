@@ -9,7 +9,7 @@ import {
   normalizePeopleCategories,
   type PeopleBreakdown,
 } from '@/lib/packages/people-categories';
-import { computeReservationPricing, getAdministrativeFeeExtraSelection, getPackageAddonExtraSelections, getPackageAddonOptions } from '@/lib/packages/resolve-departure';
+import { computeReservationPricing, getPackageAddonExtraSelections, getPackageAddonOptions } from '@/lib/packages/resolve-departure';
 import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 
 /** Sin caché: datos de experiencia y reserva siempre actualizados */
@@ -66,10 +66,6 @@ export default async function CheckoutPage({
     takeaways: [],
     forWho: [],
     notForWho: [],
-    gastosAdministrativos:
-      typeof (paquete as any).gastosAdministrativos === 'number'
-        ? (paquete as any).gastosAdministrativos
-        : 0,
   };
 
   const bookingData = toBookingPublicData(paquete as any, {});
@@ -140,13 +136,11 @@ export default async function CheckoutPage({
   const validAddonIds = requestedAddonIds.filter((id) => addonCatalog.some((addon) => addon.id === id));
   const addonOptions = addonCatalog.filter((addon) => validAddonIds.includes(addon.id));
   const addonExtras = getPackageAddonExtraSelections(paquete as any, validAddonIds);
-
-  const administrativeFeeExtra = getAdministrativeFeeExtraSelection(paquete);
   const computedPricing = computeReservationPricing(paquete, date, {
     people: safePeople,
     peopleAdults: typeof pax.adults === 'number' ? pax.adults : null,
     peopleMinors: typeof pax.minors === 'number' ? pax.minors : null,
-    selectedExtras: [...(administrativeFeeExtra ? [administrativeFeeExtra] : []), ...addonExtras],
+    selectedExtras: addonExtras,
   });
   const pricing = {
     unitAmountAdults: computedPricing.unitAmountAdults,

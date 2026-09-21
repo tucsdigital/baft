@@ -162,9 +162,8 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
         items.push({ id, label, amount });
       }
     }
-    const adminFeeAmount = Math.max(0, extrasTotalAmount - items.reduce((sum, item) => sum + item.amount, 0));
-    return { items, adminFeeAmount };
-  }, [extrasTotalAmount, selectedAddons]);
+    return { items };
+  }, [selectedAddons]);
 
   const paxSummary = useMemo(
     () =>
@@ -793,19 +792,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               <span className="truncate">{item.label}</span>
                             </span>
                             <span className="shrink-0 font-semibold tabular-nums text-[#12325D]">
-                              {formatMoney(item.amount / 100, currency)}
+                              {formatMoney((item.amount / 100) * travelerCount, currency)}
                             </span>
                           </div>
                         ))}
-                      </div>
-                    ) : null}
-
-                    {checkoutExtras.adminFeeAmount > 0 ? (
-                      <div className="flex items-center justify-between gap-3 text-sm">
-                        <span className="text-[#486887]">Gastos administrativos</span>
-                        <span className="font-semibold tabular-nums text-[#12325D]">
-                          {formatMoney(checkoutExtras.adminFeeAmount / 100, currency)}
-                        </span>
                       </div>
                     ) : null}
 

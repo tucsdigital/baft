@@ -45,7 +45,6 @@ export default function VendorNuevaReservaPage() {
             precio: e.precio ?? 0,
             bookingConfig: e.bookingConfig,
             addons: e.addons ?? [],
-            gastosAdministrativos: e.gastosAdministrativos ?? 0,
             seatLayoutId: e.seatLayoutId ?? null,
             salidas: e.salidas ?? [],
           })) as Paquete[];

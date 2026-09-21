@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Paquete } from '@/types';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Headphones, MapPin, ShieldCheck, Users, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Headphones, Info, MapPin, ShieldCheck, Users, X } from 'lucide-react';
 import BookingAddonsStep from '@/components/paquete/BookingAddonsStep';
 import { getWhatsAppLinkForPackage } from '@/lib/utils/whatsapp';
 import {
@@ -88,6 +88,14 @@ function formatMonthLabel(year: number, month: number) {
   });
 }
 
+function isWithin48Hours(isoDate: string): boolean {
+  const target = new Date(`${isoDate}T00:00:00`);
+  const now = new Date();
+  const diffMs = target.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return diffHours > -24 && diffHours <= 48;
+}
+
 export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSidebarProps) {
   const destino = paquete.destino || paquete.eventoLugar || '-';
   const duracion = paquete.duracion || '-';
@@ -120,6 +128,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   const [monthCursor, setMonthCursor] = useState(0);
   const [monthDirection, setMonthDirection] = useState<1 | -1>(1);
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  const [tooltipInfo, setTooltipInfo] = useState<{ visible: boolean; x: number; y: number; date: string }>({ visible: false, x: 0, y: 0, date: '' });
   const [pax, setPax] = useState<PeopleBreakdown>(() =>
     normalizePeopleBreakdown({ breakdown: null, categories: peopleCategories })
   );
@@ -208,6 +217,13 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   };
 
   const closeModal = () => setStep('people');
+
+  useEffect(() => {
+    if (!tooltipInfo.visible) return;
+    const handler = () => setTooltipInfo({ visible: false, x: 0, y: 0, date: '' });
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [tooltipInfo.visible]);
 
   const maxSelectablePeopleForDate = getMaxSelectablePeople(selectedAvailability?.available ?? 0, maxPeoplePerBooking);
 
@@ -559,10 +575,10 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                         <div key={label} className="flex items-center gap-1.5">
                           <div
                             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide transition-colors duration-300 ${active
-                                ? 'bg-black text-white'
-                                : done
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-gray-100 text-slate-400'
+                              ? 'bg-black text-white'
+                              : done
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-slate-400'
                               }`}
                           >
                             {done ? <CheckCircle2 className="h-3 w-3" /> : <span>{index + 1}</span>}
@@ -684,6 +700,39 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                     const isSelected = selectedDate === cell.isoDate;
                                     const sharedClasses =
                                       'relative flex h-10 w-full items-center justify-center rounded-full text-[13px] font-semibold transition-all duration-200';
+                                    const showInfo = isWithin48Hours(cell.isoDate) && cell.inMonth;
+
+                                    const handleInfoClick = (event: React.MouseEvent) => {
+                                      event.stopPropagation();
+                                      if (tooltipInfo.visible && tooltipInfo.date === cell.isoDate) {
+                                        setTooltipInfo({ visible: false, x: 0, y: 0, date: '' });
+                                      } else {
+                                        setTooltipInfo({
+                                          visible: true,
+                                          x: event.clientX,
+                                          y: event.clientY,
+                                          date: cell.isoDate,
+                                        });
+                                      }
+                                    };
+
+                                    const dayContent = (
+                                      <span className="relative flex h-full w-full items-center justify-center">
+                                        {cell.day}
+                                        {cell.isSelectable && (
+                                          <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-green-500" />
+                                        )}
+                                      </span>
+                                    );
+
+                                    const infoIcon = showInfo ? (
+                                      <span
+                                        className="absolute top-0.5 right-0.5 cursor-pointer z-10"
+                                        onClick={handleInfoClick}
+                                      >
+                                        <Info className="h-3.5 w-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+                                      </span>
+                                    ) : null;
 
                                     if (!cell.inMonth) {
                                       return <div key={cell.isoDate} className={sharedClasses} aria-hidden="true" />;
@@ -696,13 +745,14 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                           type="button"
                                           onClick={() => setSelectedDate(cell.isoDate)}
                                           className={`${sharedClasses} ${isSelected
-                                              ? 'scale-105 bg-neutral-900 text-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.5)]'
-                                              : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-900 hover:text-white'
+                                            ? 'scale-105 bg-neutral-900 text-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.5)]'
+                                            : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-900 hover:text-white'
                                             }`}
                                           aria-label={`Seleccionar ${formatDateLabel(cell.isoDate)}. ${cell.available} cupos disponibles.`}
                                           aria-pressed={isSelected}
                                         >
-                                          {cell.day}
+                                          {dayContent}
+                                          {infoIcon}
                                         </button>
                                       );
                                     }
@@ -711,10 +761,10 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                       <div
                                         key={cell.isoDate}
                                         className={`${sharedClasses} ${cell.isSoldOut
-                                            ? 'text-neutral-300 line-through'
-                                            : cell.isTooSoon
-                                              ? 'text-amber-500/60'
-                                              : 'text-neutral-200'
+                                          ? 'text-neutral-300 line-through'
+                                          : cell.isTooSoon
+                                            ? 'text-amber-500/60'
+                                            : 'text-neutral-200'
                                           }`}
                                         aria-label={
                                           cell.isSoldOut
@@ -724,7 +774,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                               : `${cell.day} sin salida`
                                         }
                                       >
-                                        {cell.day}
+                                        {dayContent}
+                                        {infoIcon}
                                       </div>
                                     );
                                   })}
@@ -809,8 +860,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               if (!selectedDate) event.preventDefault();
                             }}
                             className={`group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold tracking-[-0.01em] transition-all duration-300 active:scale-[0.98] ${selectedDate
-                                ? 'bg-neutral-900 text-white hover:bg-neutral-700'
-                                : 'pointer-events-none bg-neutral-200 text-white'
+                              ? 'bg-neutral-900 text-white hover:bg-neutral-700'
+                              : 'pointer-events-none bg-neutral-200 text-white'
                               }`}
                           >
                             Reservar
@@ -884,6 +935,32 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {tooltipInfo.visible && (
+        <div
+          className="fixed z-50 w-64 rounded-2xl border border-[#D4E6F7] bg-white p-4 shadow-[0_16px_36px_rgba(15,66,116,0.12)]"
+          style={{ left: Math.min(tooltipInfo.x, typeof window !== 'undefined' ? window.innerWidth - 280 : 400), top: tooltipInfo.y + 16 }}
+          onClick={() => setTooltipInfo({ visible: false, x: 0, y: 0, date: '' })}
+        >
+          <div className="flex items-start gap-2.5">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+            <div>
+              <p className="text-sm font-semibold text-[#0B2240]">Para reservar días próximos</p>
+              <p className="mt-1 text-sm text-[#5A7898]">Comunicate con nosotros</p>
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#2BB8BF] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#22A9B0]"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                </svg>
+                WhatsApp
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

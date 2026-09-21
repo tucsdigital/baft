@@ -30,7 +30,7 @@ export interface Salida {
   seatLayoutId?: string;
 }
 
-export type ReservationExtraCode = 'cocheCama' | 'panoramicos' | 'cafeteras' | 'administrativeFee' | 'packageAddon' | 'manualExtra';
+export type ReservationExtraCode = 'cocheCama' | 'panoramicos' | 'cafeteras' | 'packageAddon' | 'manualExtra';
 
 export type ReservationExtraSelection = {
   code: ReservationExtraCode;
@@ -172,7 +172,6 @@ export interface Paquete {
   tipo: string;
   tipos?: string[];
   precio: number;
-  gastosAdministrativos?: number;
   precioDescuentoPrimerosCupos?: number;
   tarifaEspecialFechaLimite?: string;
   moneda: 'USD' | 'ARS' | 'EUR';

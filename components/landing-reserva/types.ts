@@ -145,7 +145,6 @@ export type ReservationExtraCode =
   | 'cocheCama'
   | 'panoramicos'
   | 'cafeteras'
-  | 'administrativeFee'
   | 'packageAddon';
 
 export type ReservationExtraSelection = {

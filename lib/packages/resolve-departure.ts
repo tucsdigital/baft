@@ -69,7 +69,6 @@ const EXTRA_LABELS: Record<ReservationExtraCode, string> = {
   cocheCama: 'Coche cama',
   panoramicos: 'Panorámicos',
   cafeteras: 'Cafeteras',
-  administrativeFee: 'Gastos Administrativos',
   packageAddon: 'Adicional',
   manualExtra: 'Adicional',
 };
@@ -102,20 +101,6 @@ function normalizeAmenityConfig(value: any) {
   };
 }
 
-export function getAdministrativeFeeExtraSelection(paquete: Paquete): ReservationExtraSelection | null {
-  const rawAmount = typeof (paquete as any)?.gastosAdministrativos === 'number' ? Number((paquete as any).gastosAdministrativos) : 0;
-  const amount = toAmountCents(rawAmount);
-  if (amount <= 0) return null;
-  return {
-    code: 'administrativeFee',
-    label: EXTRA_LABELS.administrativeFee,
-    amount,
-    source: 'package',
-    scope: 'per_person',
-  };
-}
-
-/** Normaliza los adicionales configurados en el paquete (solo habilitados y con datos válidos). */
 export function getPackageAddonOptions(paquete: Paquete): Array<{
   id: string;
   title: string;
@@ -230,8 +215,6 @@ export function resolveReservationExtraSelections(params: {
       });
     }
   }
-  const administrativeFeeExtra = getAdministrativeFeeExtraSelection(params.paquete);
-  if (administrativeFeeExtra) selections.push(administrativeFeeExtra);
   return selections;
 }
 

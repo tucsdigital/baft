@@ -8,7 +8,7 @@ import { addMinutes, computeBaseCapacity, getAvailableForPackageDate, getHeldPeo
 import { orderExternalReference } from '@/lib/orders';
 import { getSeatDepartureId, seatIdsFromLabels } from '@/lib/seats/server';
 import type { SeatLayoutTemplate } from '@/types';
-import { computeReservationPricing, getAdministrativeFeeExtraSelection, getPackageAddonExtraSelections, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
+import { computeReservationPricing, getPackageAddonExtraSelections, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
 import { getPeopleBreakdownTotal, normalizePeopleBreakdown, normalizePeopleCategories } from '@/lib/packages/people-categories';
 import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 
@@ -879,11 +879,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const directSelectedExtras = [
-    getAdministrativeFeeExtraSelection(paquete),
-    ...getPackageAddonExtraSelections(paquete, (parsed.data as any).addonIds),
-  ].filter(
-    (item): item is NonNullable<ReturnType<typeof getAdministrativeFeeExtraSelection>> => Boolean(item)
+  const directSelectedExtras = getPackageAddonExtraSelections(
+    paquete,
+    (parsed.data as any).addonIds
   );
   const peopleAdults =
     breakdown && typeof (breakdown as any).adults === 'number' ? Math.max(0, Math.floor((breakdown as any).adults)) : null;
