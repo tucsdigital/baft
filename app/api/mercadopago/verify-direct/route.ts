@@ -402,36 +402,12 @@ export async function POST(request: Request) {
   const nextAttemptAtVoucher = computeVoucherNextAttemptAt({ date, now });
   const shouldQueueVoucher = Boolean(date && date !== 'sin-fecha');
 
-  // Envío inmediato: no depender del cron.
-  const confirmSendId = await trySendEmailNow({
-    to: customerEmail,
-    subject: `Compra confirmada: ${finalPackageTitle || SITE_NAME}`,
-    html: htmlConfirm,
-    text: textConfirm,
-    replyTo,
-    from,
-  });
-  let voucherSendId: string | null = null;
-  if (shouldQueueVoucher && nextAttemptAtVoucher.toMillis() <= Date.now() + 30 * 1000) {
-    voucherSendId = await trySendEmailNow({
-      to: customerEmail,
-      subject: `Recordatorio de salida (48 hs): ${finalPackageTitle || SITE_NAME}`,
-      html: htmlVoucher,
-      text: textVoucher,
-      replyTo,
-      from,
-    });
-  }
-  const adminSendId = CONTACT_INFO.email
-    ? await trySendEmailNow({
-        to: CONTACT_INFO.email,
-        subject: `Nueva reserva: ${finalPackageTitle || 'Paquete'} — ${customerName || customerEmail}`,
-        html: htmlAdmin,
-        text: textAdmin,
-        replyTo,
-        from,
-      })
-    : null;
+  // Los emails se envían desde /api/cron/email después de que la transacción
+  // haya creado la reserva y los jobs. Enviar antes de la transacción provoca
+  // duplicados cuando el webhook y esta verificación llegan simultáneamente.
+  const confirmSendId: string | null = null;
+  const voucherSendId: string | null = null;
+  const adminSendId: string | null = null;
 
   const reservationId = `mp_${directPaymentId}`;
   const reservaRef = doc(db, 'reservas', reservationId);

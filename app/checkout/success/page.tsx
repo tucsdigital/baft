@@ -6,6 +6,7 @@ import { getPaqueteBySlug } from '@/lib/paquetes';
 import ClearCheckoutStorage from '@/components/checkout/ClearCheckoutStorage';
 import SuccessVerification from '@/components/checkout/SuccessVerification';
 import DirectVerification from '@/components/checkout/DirectVerification';
+import WeTravelVerification from '@/components/checkout/WeTravelVerification';
 import OrderVerification from '@/components/checkout/OrderVerification';
 import { CONTACT_INFO, SITE_NAME, SOCIAL_MEDIA } from '@/lib/constants';
 import { db } from '@/lib/firebase';
@@ -422,10 +423,8 @@ export default async function CheckoutSuccessPage({
               initialPaymentApproved={mpReturnStatus === 'approved'}
             />
           ) : (hasSession ? <SuccessVerification sessionId={sessionId} /> : intentId ? (
-            <DirectVerification
-              intentId={intentId}
-              paymentId={paymentId}
-            />
+            params.paymentMethod === 'wetravel' ? <WeTravelVerification intentId={intentId} /> :
+              <DirectVerification intentId={intentId} paymentId={paymentId} />
           ) : null)}
 
           <div className="mt-8 space-y-4">

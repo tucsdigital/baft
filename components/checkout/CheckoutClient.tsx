@@ -43,6 +43,7 @@ type CheckoutClientProps = {
 };
 
 type CheckoutStep = 'form' | 'payment';
+type PaymentMethod = 'mercadopago' | 'wetravel';
 
 type CheckoutFormState = {
   customerFirstName: string;
@@ -112,6 +113,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   const storageKey = getCheckoutStorageKey(experience.slug, date, travelerCount);
   const [step, setStep] = useState<CheckoutStep>('form');
   const [isLoading, setIsLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mercadopago');
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [passengers, setPassengers] = useState<TravelerFormState[]>([]);
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -389,6 +391,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
           failureUrl: `${baseUrl}/checkout/cancel?slug=${encodeURIComponent(experience.slug)}`,
           pendingUrl: `${baseUrl}/checkout/success?slug=${encodeURIComponent(experience.slug)}&date=${encodeURIComponent(date)}&people=${encodeURIComponent(String(travelerCount))}`,
           ...(referralCode ? { referralCode } : {}),
+          paymentMethod,
         }),
       });
 
@@ -682,7 +685,15 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                   <Card className="rounded-3xl border-[#D4E6F7] shadow-[0_16px_36px_rgba(15,66,116,0.08)]">
                     <CardHeader className="pb-3 text-center">
                       <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">Finalizar reserva</CardTitle>
-                      <p className="text-sm text-[#5A7898]">Te redirigimos a Mercado Pago para completar el pago.</p>
+                      <p className="text-sm text-[#5A7898]">Elegí cómo pagar y te redirigimos a la plataforma segura.</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {(['mercadopago', 'wetravel'] as PaymentMethod[]).map((method) => (
+                          <button key={method} type="button" onClick={() => setPaymentMethod(method)} className={`rounded-2xl border p-4 text-left transition ${paymentMethod === method ? 'border-[#2BB8BF] bg-[#F0FCFC] ring-2 ring-[#2BB8BF]/20' : 'border-[#D4E6F7] bg-white'}`}>
+                            <div className="text-sm font-bold text-[#0B2240]">{method === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
+                            <div className="mt-1 text-xs text-[#5A7898]">Pago seguro en {method === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
+                          </button>
+                        ))}
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-5">
                       <button
@@ -693,10 +704,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                       >
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F4FF]">
-                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-[#009EE3]" /> : <img src="/images/mercado-pago-logo.png" alt="Mercado Pago" className="h-5" />}
+                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-[#009EE3]" /> : null}
                           </div>
                           <div>
-                            <div className="text-sm font-semibold text-[#0B2240]">Mercado Pago</div>
+                            <div className="text-sm font-semibold text-[#0B2240]">Continuar con {paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
                             <div className="text-xs text-[#5A7898]">Tarjetas, debito o dinero en cuenta</div>
                           </div>
                         </div>

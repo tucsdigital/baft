@@ -501,44 +501,9 @@ export async function POST(request: Request) {
             customerCountry: customerCountry || undefined,
             customerComments: intentComments || undefined,
           };
-          if (customerEmail) {
-            const confirmId = await trySendEmailNow({
-              to: customerEmail,
-              subject: `Compra confirmada: ${finalTitle}`,
-              html: buildClienteCompraConfirmadaHtml(itemEmailData),
-              text: buildClienteCompraConfirmadaText(itemEmailData),
-              replyTo,
-              from,
-            });
-            if (confirmId) sendResults.confirm[reservationId] = confirmId;
-            if (itemDate && itemDate !== 'sin-fecha') {
-              const voucherId = await trySendEmailNow({
-                to: customerEmail,
-                subject: `Recordatorio de salida (48 hs): ${finalTitle}`,
-                html: buildClienteVoucher48hsHtml(itemEmailData),
-                text: buildClienteVoucher48hsText(itemEmailData),
-                replyTo,
-                from,
-              });
-              // El voucher 48hs se envía "sent" solo si corresponde enviarlo
-              // ya (la salida es en menos de 48hs). Si falta mucho, queda
-              // pendiente para el cron aunque Resend funcione ahora: no
-              // queremos mandar el recordatorio meses antes.
-              const dueNow = computeVoucherNextAttemptAt({ date: itemDate, now }).toMillis() <= now.toMillis() + 30 * 1000;
-              if (voucherId && dueNow) sendResults.voucher[reservationId] = voucherId;
-            }
-          }
-          if (CONTACT_INFO.email) {
-            const adminId = await trySendEmailNow({
-              to: CONTACT_INFO.email,
-              subject: `Nueva reserva: ${finalTitle} — ${customerName || customerEmail}`,
-              html: buildAdminNuevaReservaHtml(itemEmailData),
-              text: buildAdminNuevaReservaText(itemEmailData),
-              replyTo,
-              from,
-            });
-            if (adminId) sendResults.admin[reservationId] = adminId;
-          }
+          // Los jobs se crean dentro de la transacción y los procesa el cron.
+          // No enviar desde antes de la transacción: webhook duplicado + flujo
+          // de retorno pueden ejecutarse en paralelo y mandar dos emails.
         }
       }
 
@@ -1466,46 +1431,6 @@ export async function POST(request: Request) {
     const nextAttemptAtVoucherDirect = computeVoucherNextAttemptAt({ date, now: Timestamp.now() });
     const shouldQueueVoucherDirect = Boolean(date && date !== 'sin-fecha');
     const directSend: { confirm?: string; voucher?: string; admin?: string } = {};
-
-    // Envío inmediato (flujo directo): no depender del cron. Si Resend
-    // está configurado, el cliente recibe el email aunque Vercel Cron no
-    // esté activo o el webhook de localhost no llegue.
-    if (isApproved) {
-      if (customerEmail) {
-        const confirmId = await trySendEmailNow({
-          to: customerEmail,
-          subject: `Compra confirmada: ${finalPackageTitle || SITE_NAME}`,
-          html: htmlConfirm,
-          text: textConfirm,
-          replyTo,
-          from,
-        });
-        if (confirmId) directSend.confirm = confirmId;
-        const voucherDueNow = nextAttemptAtVoucherDirect.toMillis() <= Date.now() + 30 * 1000;
-        if (shouldQueueVoucherDirect && voucherDueNow) {
-          const voucherId = await trySendEmailNow({
-            to: customerEmail,
-            subject: `Recordatorio de salida (48 hs): ${finalPackageTitle || SITE_NAME}`,
-            html: htmlVoucher,
-            text: textVoucher,
-            replyTo,
-            from,
-          });
-          if (voucherId) directSend.voucher = voucherId;
-        }
-      }
-      if (CONTACT_INFO.email) {
-        const adminId = await trySendEmailNow({
-          to: CONTACT_INFO.email,
-          subject: `Nueva reserva: ${finalPackageTitle || 'Paquete'} — ${customerName || customerEmail}`,
-          html: htmlAdmin,
-          text: textAdmin,
-          replyTo,
-          from,
-        });
-        if (adminId) directSend.admin = adminId;
-      }
-    }
 
     // Crear o actualizar reserva en Firestore
     try {

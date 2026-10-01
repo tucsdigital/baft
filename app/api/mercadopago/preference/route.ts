@@ -11,6 +11,7 @@ import type { SeatLayoutTemplate } from '@/types';
 import { computeReservationPricing, getPackageAddonExtraSelections, resolveDepartureConfig } from '@/lib/packages/resolve-departure';
 import { getPeopleBreakdownTotal, normalizePeopleBreakdown, normalizePeopleCategories } from '@/lib/packages/people-categories';
 import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
+import { createWeTravelPaymentLink, wetravelEnabled } from '@/lib/wetravel';
 
 export const runtime = 'nodejs';
 
@@ -44,6 +45,7 @@ const payloadSchema = z.object({
   failureUrl: z.string().url().optional(),
   pendingUrl: z.string().url().optional(),
   referralCode: z.string().max(60).optional(),
+  paymentMethod: z.enum(['mercadopago', 'wetravel']).optional().default('mercadopago'),
 }).refine((data) => {
   if (data.cartId) return true;
   return Boolean(data.people && (data.slug || data.packageId));
@@ -229,14 +231,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Origen no autorizado.' }, { status: 403 });
   }
 
-  if (!mercadopagoEnabled) {
+  const payload = await request.json().catch(() => null);
+  const requestedPaymentMethod = String((payload as any)?.paymentMethod || 'mercadopago');
+  if (requestedPaymentMethod === 'wetravel' ? !wetravelEnabled : !mercadopagoEnabled) {
     return NextResponse.json(
-      { error: 'Falta configurar MERCADO_PAGO_ACCESS_TOKEN.' },
+      { error: requestedPaymentMethod === 'wetravel' ? 'Falta configurar WETRAVEL_API_KEY.' : 'Falta configurar MERCADO_PAGO_ACCESS_TOKEN.' },
       { status: 500 }
     );
   }
 
-  const payload = await request.json().catch(() => null);
   const parsed = payloadSchema.safeParse(payload);
 
   if (!parsed.success) {
@@ -261,6 +264,7 @@ export async function POST(request: Request) {
     pendingUrl: bodyPendingUrl,
   } = parsed.data;
   const referralCode = parsed.data.referralCode?.trim() || undefined;
+  const paymentMethod = parsed.data.paymentMethod;
   const passengerDetails = Array.isArray(parsed.data.passengerDetails)
     ? parsed.data.passengerDetails.map((item) => ({
         firstName: String(item.firstName ?? '').trim(),
@@ -920,6 +924,7 @@ export async function POST(request: Request) {
       date,
       people,
       intentId,
+      ...(paymentMethod === 'wetravel' ? { paymentMethod: 'wetravel' } : {}),
     }
   );
   const failureUrl = withQueryParams(
@@ -929,6 +934,7 @@ export async function POST(request: Request) {
       date,
       people,
       intentId,
+      ...(paymentMethod === 'wetravel' ? { paymentMethod: 'wetravel' } : {}),
     }
   );
   const pendingUrl = withQueryParams(
@@ -938,6 +944,7 @@ export async function POST(request: Request) {
       date,
       people,
       intentId,
+      ...(paymentMethod === 'wetravel' ? { paymentMethod: 'wetravel' } : {}),
     }
   );
 
@@ -1001,7 +1008,7 @@ export async function POST(request: Request) {
 
   await setDoc(intentRef, {
     status: 'created',
-    provider: 'mercadopago',
+    provider: paymentMethod,
     packageId: paquete.id,
     packageSlug: paquete.slug,
     packageTitle: paquete.titulo,
@@ -1048,6 +1055,21 @@ export async function POST(request: Request) {
   });
 
   try {
+    if (paymentMethod === 'wetravel') {
+      const link = await createWeTravelPaymentLink({
+        title: paquete.titulo,
+        externalId: externalReference,
+        date,
+        currency,
+        amountMinor: sessionAmount,
+        description: paquete.descripcionCorta ?? `Reserva para ${people} persona${people > 1 ? 's' : ''}`,
+      });
+      await updateDoc(intentRef, {
+        status: 'redirected', wetravelPaymentLinkId: link.id || null, wetravelPaymentLinkUrl: link.url,
+        updatedAt: Timestamp.now(),
+      });
+      return NextResponse.json({ url: link.url, paymentLinkId: link.id || null, externalReference, intentId, provider: 'wetravel' });
+    }
     // Crear preferencia de pago en Mercado Pago
     const productImage = paquete.imagenTarjeta ?? paquete.imagenPrincipal;
     

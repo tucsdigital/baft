@@ -1,18 +1,18 @@
-name: Cron - Limpiar Holds
+name: Cron - Reconciliar WeeTravel
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
-  cleanup-holds:
+  reconcile:
     runs-on: ubuntu-latest
     steps:
-      - name: Llamar endpoint de limpieza de holds
+      - name: Reconciliar Payment Links pendientes
         run: |
           test -n "${{ secrets.APP_URL }}" || (echo "Falta APP_URL" && exit 1)
           test -n "${{ secrets.CRON_SECRET }}" || (echo "Falta CRON_SECRET" && exit 1)
-          curl --fail-with-body --silent --show-error --retry 2 -X POST "${{ secrets.APP_URL }}/api/cron/cleanup-reservation-holds" \
+          curl --fail-with-body --silent --show-error --retry 2 -X POST "${{ secrets.APP_URL }}/api/cron/wetravel-reconcile" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json"

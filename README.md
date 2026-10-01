@@ -172,7 +172,73 @@ BLOB_READ_WRITE_TOKEN=tu_vercel_blob_token
 
 # Site URL (opcional, para producción)
 NEXT_PUBLIC_SITE_URL=https://tu-dominio.com
+
+# Mercado Pago
+MERCADO_PAGO_ACCESS_TOKEN=tu_access_token
+MERCADO_PAGO_PUBLIC_KEY=tu_public_key
+
+# Emails
+RESEND_API_KEY=tu_resend_api_key
+RESEND_FROM_EMAIL=reservas@tu-dominio.com
+SUPPORT_EMAIL=soporte@tu-dominio.com
+
+# Endpoint protegido de tareas programadas
+CRON_SECRET=un_secreto_largo_y_aleatorio
+
+# WeeTravel (opcional)
+# Partner API key, no es la contraseña del panel web
+WETRAVEL_API_KEY=tu_partner_api_key
+WETRAVEL_API_URL=https://api.wetravel.com/v3
+WETRAVEL_AUTH_URL=https://api.wetravel.com/v2/auth/tokens/access
+WETRAVEL_PARTICIPANT_FEES=service
+WETRAVEL_WEBHOOK_SECRET=tu_secreto_de_webhook
 ```
+
+### Tareas programadas con GitHub Actions
+
+Las tareas programadas no se ejecutan en Vercel. GitHub Actions llama los endpoints protegidos de la aplicación:
+
+- `GET /api/cron/email`: procesa los emails pendientes.
+- `POST /api/cron/cleanup-reservation-holds`: libera holds vencidos.
+- `POST /api/cron/wetravel-reconcile`: reconcilia Payment Links WeeTravel pendientes.
+
+En el repositorio de GitHub, configurá estos Actions secrets:
+
+| Secret | Valor |
+| --- | --- |
+| `APP_URL` | URL pública de producción, sin `/` final. Ej.: `https://www.tudominio.com` |
+| `CRON_SECRET` | Exactamente el mismo valor configurado en Vercel para `CRON_SECRET` |
+
+Los workflows son `.github/workflows/cron-emails.yml`, `.github/workflows/cron-cleanup-holds.yml` y `.github/workflows/cron-wetravel-reconcile.yml`. Se pueden ejecutar manualmente desde la pestaña **Actions** para verificar la configuración. El workflow de emails corre cada 5 minutos, el de limpieza cada hora y la reconciliación WeeTravel cada 10 minutos.
+
+No agregues `crons` en `vercel.json`: Vercel solo hospeda los endpoints.
+
+### Configuración y prueba de WeeTravel
+
+La integración usa la Partner API v3 y crea un Payment Link por checkout. Necesitás una cuenta WeeTravel con acceso a Partner APIs y una **Partner API key** generada desde `Profile → Partner API Integration`. La API key se canjea automáticamente por un access token temporal de una hora; no uses la contraseña del panel ni pegues la key en el frontend. Configurá en Vercel y local:
+
+```env
+WETRAVEL_API_KEY=...
+WETRAVEL_API_URL=https://api.demo.wetravel.to/v3
+WETRAVEL_AUTH_URL=https://api.demo.wetravel.to/v2/auth/tokens/access
+WETRAVEL_PARTICIPANT_FEES=service
+WETRAVEL_WEBHOOK_SECRET=...
+```
+
+Para probar el sandbox:
+
+1. Ingresá al sandbox web que te entregó soporte y confirmá que la cuenta tenga habilitado **Partner API Integration**. La URL de la web y sus credenciales sirven para operar el panel, pero no reemplazan la Partner API key.
+2. Publicá la aplicación en una URL HTTPS accesible desde Internet. WeeTravel no puede llamar `localhost`; para desarrollo podés usar un túnel HTTPS temporal.
+3. En WeeTravel habilitá **Webhooks**, agregá `https://TU_DOMINIO/api/wetravel/webhook` y suscribite a `payment.created`, `payment.updated`, `booking.created` y `booking.updated`.
+4. Configurá `WETRAVEL_WEBHOOK_SECRET` únicamente si WeeTravel entrega un secreto y firma documentada para tu cuenta. Si no hay firma oficial, dejalo vacío; la integración no inventa una validación HMAC.
+5. En el checkout elegí **WeTravel**, completá una reserva de prueba y verificá que la redirección abra el Payment Link con importe y moneda correctos.
+6. Desde el panel de WeeTravel completá el pago y verificá que el webhook responda HTTP 200. Los eventos recibidos se guardan en Firestore en `wetravelEvents`.
+7. Verificá que el evento exitoso cree una reserva, consuma el hold, genere un código y cree tres documentos en `emailJobs` con prefijo `wt_`.
+8. Reenviá el mismo evento y comprobá que no se genere una segunda reserva ni emails duplicados.
+
+La ruta `GET /api/wetravel/status?intentId=...` permite consultar el estado local del checkout. La confirmación real depende del webhook o de la reconciliación protegida por `CRON_SECRET`; llegar a `/checkout/success` no convierte por sí solo un pago pendiente en aprobado.
+
+Para producción reemplazá la key y los endpoints demo por una Partner API key productiva. La key compartida por soporte para `demo.wetravel.to` no debe reutilizarse para cobrar en vivo.
 
 ### 4. Configurar Firebase
 
