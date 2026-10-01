@@ -476,6 +476,8 @@ export async function POST(request: Request) {
         customerDocument: customerDocument || null,
         customerDocumentNormalized: normalizeDigits(customerDocument),
         customerBirthDate: intentData.customerBirthDate ? String(intentData.customerBirthDate) : null,
+        customerAge: typeof intentData.customerAge === 'number' ? intentData.customerAge : null,
+        customerHotel: intentData.customerHotel ? String(intentData.customerHotel) : null,
         customerComments: intentData.customerComments || null,
         passengerDetails: Array.isArray(intentData.passengerDetails) ? intentData.passengerDetails : null,
         reservationCode,

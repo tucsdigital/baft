@@ -161,7 +161,9 @@ export async function finalizeWeTravelPaidCheckout(input: {
       customerPhone: intentData.customerPhone || null, customerPhoneNormalized: normalizeDigits(intentData.customerPhone),
       customerCountry: intentData.customerCountry || null, customerDocument: intentData.customerDocument || null,
       customerDocumentNormalized: normalizeDigits(intentData.customerDocument),
-      customerBirthDate: intentData.customerBirthDate || null, customerComments: intentData.customerComments || null,
+      customerBirthDate: intentData.customerBirthDate || null,
+      customerAge: typeof intentData.customerAge === 'number' ? intentData.customerAge : null,
+      customerHotel: intentData.customerHotel || null, customerComments: intentData.customerComments || null,
       passengerDetails: Array.isArray(intentData.passengerDetails) ? intentData.passengerDetails : null,
       reservationCode, status: 'reserved', createdByAdmin: false, attachments: [],
       pricingSnapshot: buildReservationPricingSnapshot({

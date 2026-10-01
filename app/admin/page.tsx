@@ -172,14 +172,6 @@ export default function AdminDashboard() {
       iconClass: 'bg-slate-100 text-slate-700',
       href: '/admin/newsletter',
     },
-    {
-      label: 'Ventas pendientes',
-      value: stats.ventasPendientes,
-      icon: CalendarCheck,
-      accent: 'from-amber-500/20 to-transparent',
-      iconClass: 'bg-amber-100 text-amber-700',
-      href: '/admin/ventas',
-    },
   ];
 
   return (

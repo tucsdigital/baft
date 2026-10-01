@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { NationalitySelect } from '@/components/ui/nationality-select';
 import { PhoneWithPrefixInput } from '@/components/ui/phone-with-prefix-input';
 import { Textarea } from '@/components/ui/textarea';
-import { DEFAULT_COUNTRY_NAME, applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
+import { applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
 import { buildLeadTimeMessage, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 import type { PeopleBreakdown } from '@/lib/packages/people-categories';
 
@@ -21,7 +21,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const NAME_MIN_LENGTH = 2;
 const PHONE_MIN_DIGITS = 8;
-const CHECKOUT_STORAGE_PREFIX = 'checkout_form_';
+const CHECKOUT_STORAGE_PREFIX = 'checkout_form_v2_';
 
 type CheckoutPricing = {
   unitAmountAdults: number;
@@ -45,6 +45,12 @@ type CheckoutClientProps = {
 type CheckoutStep = 'form' | 'payment';
 type PaymentMethod = 'mercadopago' | 'wetravel';
 
+function paymentMethodForCountry(countryName: string): PaymentMethod | null {
+  const normalized = countryName.trim().toLocaleLowerCase('es');
+  if (!normalized) return null;
+  return normalized === 'argentina' ? 'mercadopago' : 'wetravel';
+}
+
 type CheckoutFormState = {
   customerFirstName: string;
   customerLastName: string;
@@ -53,6 +59,8 @@ type CheckoutFormState = {
   customerPhone: string;
   customerDocument: string;
   customerBirthDate: string;
+  customerAge: string;
+  customerHotel: string;
   customerComments: string;
 };
 
@@ -113,7 +121,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   const storageKey = getCheckoutStorageKey(experience.slug, date, travelerCount);
   const [step, setStep] = useState<CheckoutStep>('form');
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mercadopago');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [passengers, setPassengers] = useState<TravelerFormState[]>([]);
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -122,6 +130,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     firstName: false,
     lastName: false,
     email: false,
+    country: false,
     phone: false,
     document: false,
     birthDate: false,
@@ -130,10 +139,12 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     customerFirstName: '',
     customerLastName: '',
     customerEmail: '',
-    customerCountry: DEFAULT_COUNTRY_NAME,
+    customerCountry: '',
     customerPhone: '',
     customerDocument: '',
     customerBirthDate: '',
+    customerAge: '',
+    customerHotel: '',
     customerComments: '',
   });
 
@@ -197,6 +208,8 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
           ...(parsed.customerPhone != null && { customerPhone: String(parsed.customerPhone) }),
           ...(parsed.customerDocument != null && { customerDocument: String(parsed.customerDocument) }),
           ...(parsed.customerBirthDate != null && { customerBirthDate: String(parsed.customerBirthDate) }),
+          ...(parsed.customerAge != null && { customerAge: String(parsed.customerAge) }),
+          ...(parsed.customerHotel != null && { customerHotel: String(parsed.customerHotel) }),
           ...(parsed.customerComments != null && { customerComments: String(parsed.customerComments) }),
         }));
       }
@@ -252,19 +265,23 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   // Un error que viene del servidor (ej: fecha que cayó del plazo entre la excursión y el checkout)
   // bloquea el pago y se muestra con link para volver a elegir fecha.
   const blockedError = dateTooSoon ? initialError : null;
-  const selectedDialCode = getCountryDialCode(form.customerCountry) || '+54';
+  const selectedDialCode = getCountryDialCode(form.customerCountry);
+  const countryPaymentMethod = paymentMethodForCountry(form.customerCountry);
 
   const handleNationalityChange = (countryName: string) => {
+    const nextPaymentMethod = paymentMethodForCountry(countryName);
     setForm((prev) => ({
       ...prev,
       customerCountry: countryName,
       customerPhone: applyPhonePrefix(prev.customerPhone, getCountryDialCode(countryName)),
     }));
+    setPaymentMethod(nextPaymentMethod);
   };
 
   const firstNameError = touched.firstName && form.customerFirstName.trim().length < NAME_MIN_LENGTH;
   const lastNameError = touched.lastName && form.customerLastName.trim().length < NAME_MIN_LENGTH;
   const emailError = touched.email && (!form.customerEmail.trim() || !EMAIL_REGEX.test(form.customerEmail.trim()));
+  const countryError = touched.country && !form.customerCountry.trim();
   const phoneError = touched.phone && countPhoneDigits(form.customerPhone) < PHONE_MIN_DIGITS;
   const documentError = touched.document && !form.customerDocument.trim();
   const birthDateError = touched.birthDate && !DATE_REGEX.test(form.customerBirthDate.trim());
@@ -297,6 +314,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
       firstName: true,
       lastName: true,
       email: true,
+      country: true,
       phone: true,
       document: true,
       birthDate: true,
@@ -312,6 +330,11 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     }
     if (!EMAIL_REGEX.test(form.customerEmail.trim())) {
       setError('Ingresá un email válido.');
+      return;
+    }
+    if (!form.customerCountry.trim() || !countryPaymentMethod) {
+      setError('Seleccioná tu país.');
+      setTouched((prev) => ({ ...prev, country: true }));
       return;
     }
     if (form.customerPhone.trim().length < PHONE_MIN_DIGITS || countPhoneDigits(form.customerPhone) < PHONE_MIN_DIGITS) {
@@ -340,11 +363,13 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     }
 
     setError(null);
+    setPaymentMethod(countryPaymentMethod);
     setStep('payment');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    void createPaymentPreference(countryPaymentMethod);
   };
 
-  const createMercadoPagoPreference = async () => {
+  const createPaymentPreference = async (method: PaymentMethod = paymentMethod ?? countryPaymentMethod ?? 'mercadopago') => {
     if (blockedError) {
       setError(blockedError);
       return;
@@ -386,12 +411,14 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
           customerPhone: form.customerPhone.trim() || undefined,
           customerDocument: form.customerDocument.trim() || undefined,
           customerBirthDate: form.customerBirthDate.trim() || undefined,
+          ...(form.customerAge.trim() ? { customerAge: Number(form.customerAge) } : {}),
+          customerHotel: form.customerHotel.trim() || undefined,
           customerComments: form.customerComments.trim() || undefined,
           successUrl: `${baseUrl}/checkout/success?slug=${encodeURIComponent(experience.slug)}&date=${encodeURIComponent(date)}&people=${encodeURIComponent(String(travelerCount))}`,
           failureUrl: `${baseUrl}/checkout/cancel?slug=${encodeURIComponent(experience.slug)}`,
           pendingUrl: `${baseUrl}/checkout/success?slug=${encodeURIComponent(experience.slug)}&date=${encodeURIComponent(date)}&people=${encodeURIComponent(String(travelerCount))}`,
           ...(referralCode ? { referralCode } : {}),
-          paymentMethod,
+          paymentMethod: method,
         }),
       });
 
@@ -523,13 +550,19 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerNationality">Nacionalidad *</Label>
+                            <Label htmlFor="customerNationality">País *</Label>
                             <NationalitySelect
                               id="customerNationality"
                               value={form.customerCountry}
                               onChange={handleNationalityChange}
                               placeholder="Seleccioná tu nacionalidad"
                             />
+                            {countryPaymentMethod ? (
+                              <p className="text-xs font-semibold text-[#537190]">
+                                Medio de pago: {countryPaymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}
+                              </p>
+                            ) : null}
+                            {countryError ? <p className="text-xs font-semibold text-red-500">Seleccioná un país.</p> : null}
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor="customerPhone">WhatsApp *</Label>
@@ -562,6 +595,28 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               onBlur={() => setTouched((prev) => ({ ...prev, birthDate: true }))}
                             />
                             {birthDateError ? <p className="text-xs font-semibold text-red-500">Ingresa una fecha valida.</p> : null}
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="customerAge">Edad</Label>
+                            <Input
+                              id="customerAge"
+                              type="number"
+                              min={0}
+                              max={120}
+                              inputMode="numeric"
+                              value={form.customerAge}
+                              onChange={(event) => setForm((prev) => ({ ...prev, customerAge: event.target.value }))}
+                              placeholder="Ej: 30"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="customerHotel">Hotel</Label>
+                            <Input
+                              id="customerHotel"
+                              value={form.customerHotel}
+                              onChange={(event) => setForm((prev) => ({ ...prev, customerHotel: event.target.value }))}
+                              placeholder="Nombre del hotel"
+                            />
                           </div>
                         </div>
 
@@ -685,20 +740,20 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                   <Card className="rounded-3xl border-[#D4E6F7] shadow-[0_16px_36px_rgba(15,66,116,0.08)]">
                     <CardHeader className="pb-3 text-center">
                       <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">Finalizar reserva</CardTitle>
-                      <p className="text-sm text-[#5A7898]">Elegí cómo pagar y te redirigimos a la plataforma segura.</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {(['mercadopago', 'wetravel'] as PaymentMethod[]).map((method) => (
-                          <button key={method} type="button" onClick={() => setPaymentMethod(method)} className={`rounded-2xl border p-4 text-left transition ${paymentMethod === method ? 'border-[#2BB8BF] bg-[#F0FCFC] ring-2 ring-[#2BB8BF]/20' : 'border-[#D4E6F7] bg-white'}`}>
-                            <div className="text-sm font-bold text-[#0B2240]">{method === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
-                            <div className="mt-1 text-xs text-[#5A7898]">Pago seguro en {method === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
-                          </button>
-                        ))}
+                      <p className="text-sm text-[#5A7898]">Según el país seleccionado, te redirigimos automáticamente al medio de pago disponible.</p>
+                      <div className="rounded-2xl border border-[#2BB8BF]/30 bg-[#F0FCFC] p-4">
+                        <div className="text-sm font-bold text-[#0B2240]">
+                          {paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}
+                        </div>
+                        <div className="mt-1 text-xs text-[#5A7898]">
+                          {paymentMethod === 'mercadopago' ? 'Disponible para Argentina.' : 'Disponible para países fuera de Argentina.'}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-5">
                       <button
                         type="button"
-                        onClick={() => void createMercadoPagoPreference()}
+                        onClick={() => void createPaymentPreference()}
                         disabled={isLoading || Boolean(blockedError)}
                         className="flex cursor-pointer w-full items-center justify-between rounded-2xl border border-[#D7E8F7] bg-white px-4 py-3.5 text-left transition hover:shadow-[0_12px_28px_rgba(15,66,116,0.1)] disabled:opacity-60"
                       >
@@ -708,7 +763,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                           </div>
                           <div>
                             <div className="text-sm font-semibold text-[#0B2240]">Continuar con {paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
-                            <div className="text-xs text-[#5A7898]">Tarjetas, debito o dinero en cuenta</div>
+                            <div className="text-xs text-[#5A7898]">Pago seguro en la plataforma seleccionada</div>
                           </div>
                         </div>
                         <div className="rounded-full bg-[#009EE3] px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white">

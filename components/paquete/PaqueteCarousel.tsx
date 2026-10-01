@@ -24,7 +24,7 @@ export default function PaqueteCarousel({
 
   return (
     <div className="relative isolate overflow-hidden rounded-[28px] border border-[#D2E5F6] bg-white shadow-[0_16px_42px_rgba(15,66,116,0.14)] sm:rounded-[32px]">
-      <div className="relative min-h-[240px] sm:min-h-[320px] md:min-h-[420px] lg:min-h-[500px]">
+      <div className="relative min-h-[220px] sm:min-h-[320px] md:min-h-[420px] lg:min-h-[500px]">
         {imageLoading ? <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-[#DCEBFA] via-[#ECF5FE] to-[#DCEBFA]" /> : null}
         <Image
           src={current}

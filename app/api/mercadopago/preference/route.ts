@@ -12,6 +12,7 @@ import { computeReservationPricing, getPackageAddonExtraSelections, resolveDepar
 import { getPeopleBreakdownTotal, normalizePeopleBreakdown, normalizePeopleCategories } from '@/lib/packages/people-categories';
 import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 import { createWeTravelPaymentLink, wetravelEnabled } from '@/lib/wetravel';
+import { getCountryByName } from '@/lib/countries';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,8 @@ const payloadSchema = z.object({
   customerCountry: z.string().max(60).optional(),
   customerDocument: z.string().max(50).optional(),
   customerBirthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  customerAge: z.number().int().min(0).max(120).optional(),
+  customerHotel: z.string().max(160).optional(),
   customerComments: z.string().max(500).optional(),
   passengerDetails: z.array(travelerDetailsSchema).max(50).optional(),
   successUrl: z.string().url().optional(),
@@ -258,6 +261,8 @@ export async function POST(request: Request) {
     customerCountry,
     customerDocument,
     customerBirthDate,
+    customerAge,
+    customerHotel,
     customerComments,
     successUrl: bodySuccessUrl,
     failureUrl: bodyFailureUrl,
@@ -265,6 +270,19 @@ export async function POST(request: Request) {
   } = parsed.data;
   const referralCode = parsed.data.referralCode?.trim() || undefined;
   const paymentMethod = parsed.data.paymentMethod;
+  if (!cartId) {
+    const country = getCountryByName(customerCountry ?? '');
+    if (!country) {
+      return NextResponse.json({ error: 'Seleccioná un país válido.' }, { status: 400 });
+    }
+    const expectedPaymentMethod = country.code === 'AR' ? 'mercadopago' : 'wetravel';
+    if (paymentMethod !== expectedPaymentMethod) {
+      return NextResponse.json(
+        { error: `El medio de pago disponible para ${country.name} es ${expectedPaymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}.` },
+        { status: 400 }
+      );
+    }
+  }
   const passengerDetails = Array.isArray(parsed.data.passengerDetails)
     ? parsed.data.passengerDetails.map((item) => ({
         firstName: String(item.firstName ?? '').trim(),
@@ -632,6 +650,8 @@ export async function POST(request: Request) {
           country: customerCountry ?? null,
           document: customerDocument ?? null,
           birthDate: customerBirthDate ?? null,
+          age: customerAge ?? null,
+          hotel: customerHotel ?? null,
           comments: customerComments ?? null,
         },
         passengerDetails: passengerDetails ?? null,
@@ -659,6 +679,8 @@ export async function POST(request: Request) {
         customerCountry: customerCountry ?? null,
         customerDocument: customerDocument ?? null,
         customerBirthDate: customerBirthDate ?? null,
+        customerAge: customerAge ?? null,
+        customerHotel: customerHotel ?? null,
         customerComments: customerComments ?? null,
         passengerDetails: passengerDetails ?? null,
         externalReference,
@@ -1034,6 +1056,8 @@ export async function POST(request: Request) {
     customerCountry: customerCountry ?? null,
     customerDocument: customerDocument ?? null,
     customerBirthDate: customerBirthDate ?? null,
+    customerAge: customerAge ?? null,
+    customerHotel: customerHotel ?? null,
     customerComments: customerComments ?? null,
     passengerDetails: passengerDetails ?? null,
     externalReference,

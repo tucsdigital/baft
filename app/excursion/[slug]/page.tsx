@@ -209,8 +209,8 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
       <PaqueteSchema paquete={paquete} basePath="/excursion" />
       <Navbar variant="homeMockup" reserveSpace />
       <WhatsAppButton />
-      <main className="container mx-auto px-4 py-6 md:px-6 md:py-8 lg:px-8">
-        <div className="text-xs text-[#6A86A6] md:text-sm">
+      <main className="container mx-auto px-4 pb-24 pt-4 sm:pb-28 sm:pt-6 md:px-6 md:py-8 lg:px-8">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#6A86A6] md:text-sm">
           <Link href="/" className="hover:text-[#2BB8BF]">
             Inicio
           </Link>
@@ -230,66 +230,75 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
           <span className="text-[#224165]">{paquete.titulo}</span>
         </div>
 
-        <section className="mt-4">
+        <section className="mt-3 sm:mt-4">
           <PaqueteCarousel images={images} title={paquete.titulo} />
         </section>
 
-        <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="space-y-5">
-            <div className="rounded-3xl border border-[#D4E6F7] bg-white p-6 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
+        <div className="mt-4 grid grid-cols-1 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+          <section className="order-1 min-w-0 xl:col-start-1 xl:row-start-1">
+            <div className="rounded-3xl border border-[#D4E6F7] bg-white p-4 shadow-[0_14px_34px_rgba(15,66,116,0.08)] sm:p-6">
 
               <div>
-                <h1 className="text-[34px] font-extrabold leading-[1.05] tracking-[-0.02em] text-[#0B2240]">
+                <h1 className="text-[28px] font-extrabold leading-[1.08] tracking-[-0.025em] text-[#0B2240] sm:text-[34px]">
                   {paquete.titulo}
                 </h1>
-                <p className="mt-2 text-sm text-[#537190]">
+                <p className="mt-3 text-sm leading-relaxed text-[#537190] sm:text-base">
                   {short || 'Naturaleza imponente, aventura y confort en una experiencia única.'}
                 </p>
-                <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[#2A4E74]">
-                  <MapPin className="h-4 w-4 text-[#2BB8BF]" />
-                  {locationText}
+                <div className="mt-3 inline-flex max-w-full items-start gap-2 text-xs font-semibold text-[#2A4E74] sm:text-sm">
+                  <MapPin className="h-4 w-4 shrink-0 text-[#2BB8BF]" />
+                  <span className="min-w-0 break-words">{locationText}</span>
                 </div>
                 {longDescriptionHtml ? (
                   <div
-                    className="prose prose-sm mt-4 max-w-none text-[#415F7E] prose-headings:text-[#0B2240] prose-strong:text-[#17395E] md:prose-base"
+                    className="prose prose-sm mt-5 max-w-none break-words text-[#415F7E] prose-headings:text-[#0B2240] prose-strong:text-[#17395E] prose-p:leading-7 sm:prose-base"
                     dangerouslySetInnerHTML={{ __html: longDescriptionHtml }}
                   />
                 ) : (
-                  <p className="mt-4 text-sm leading-relaxed text-[#415F7E]">
+                  <p className="mt-5 text-sm leading-7 text-[#415F7E] sm:text-base">
                     Descubrí paisajes inolvidables y experiencias únicas con un programa premium que combina excursiones, alojamientos seleccionados y servicios exclusivos.
                   </p>
                 )}
               </div>
 
               {images.length > 1 ? (
-                <div className="mt-5">
+                <div className="mt-5 sm:mt-6">
                   <PaqueteGalleryGrid images={images.slice(0)} title={paquete.titulo} />
                 </div>
               ) : null}
             </div>
 
+          </section>
+
+          <aside id="reserva-directa" className="order-2 min-w-0 scroll-mt-24 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+            <div className="xl:sticky xl:top-24">
+              <PaqueteSidebar paquete={paquete} bookingDates={bookingDates} />
+            </div>
+          </aside>
+
+          <section className="order-3 min-w-0 space-y-5 xl:col-start-1 xl:row-start-2">
             <PaqueteItinerary steps={paquete.itinerarioSteps} html={paquete.itinerario} visible={paquete.mostrarItinerario} />
 
             {(paquete.incluye.length > 0 || (paquete.noIncluye && paquete.noIncluye.length > 0)) && (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-3xl border border-[#D8EFE0] bg-[#F5FFF7] p-5 shadow-[0_12px_28px_rgba(28,122,67,0.08)]">
+                <div className="rounded-3xl border border-[#D8EFE0] bg-[#F5FFF7] p-4 shadow-[0_12px_28px_rgba(28,122,67,0.08)] sm:p-5">
                   <h3 className="text-lg font-extrabold text-[#1A7E4F]">Incluye</h3>
-                  <ul className="mt-3 space-y-2">
+                  <ul className="mt-3 space-y-2.5">
                     {paquete.incluye.map((item, index) => (
-                      <li key={index} className="flex items-start gap-2 text-sm text-[#27694B]">
-                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#1AA861]" />
-                        <span>{item}</span>
+                      <li key={index} className="flex items-start gap-2 text-sm leading-6 text-[#27694B]">
+                        <CheckCircle className="mt-1 h-4 w-4 shrink-0 text-[#1AA861]" />
+                        <span className="min-w-0 break-words">{item}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="rounded-3xl border border-[#F1DCDC] bg-[#FFF8F8] p-5 shadow-[0_12px_28px_rgba(154,58,58,0.08)]">
+                <div className="rounded-3xl border border-[#F1DCDC] bg-[#FFF8F8] p-4 shadow-[0_12px_28px_rgba(154,58,58,0.08)] sm:p-5">
                   <h3 className="text-lg font-extrabold text-[#A13C3C]">No incluye</h3>
-                  <ul className="mt-3 space-y-2">
+                  <ul className="mt-3 space-y-2.5">
                     {(paquete.noIncluye || []).map((item, index) => (
-                      <li key={index} className="flex items-start gap-2 text-sm text-[#7F3A3A]">
-                        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#D95353]" />
-                        <span>{item}</span>
+                      <li key={index} className="flex items-start gap-2 text-sm leading-6 text-[#7F3A3A]">
+                        <XCircle className="mt-1 h-4 w-4 shrink-0 text-[#D95353]" />
+                        <span className="min-w-0 break-words">{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -333,12 +342,6 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
               </div>
             </div>
           </section>
-
-          <aside className="space-y-6">
-            <div className="xl:sticky xl:top-24">
-              <PaqueteSidebar paquete={paquete} bookingDates={bookingDates} />
-            </div>
-          </aside>
         </div>
       </main>
 

@@ -388,6 +388,8 @@ export async function POST(request: Request) {
         (orderData?.customer?.birthDate ? String(orderData.customer.birthDate) : '') ||
         (intentData.customerBirthDate ? String(intentData.customerBirthDate) : '') ||
         null;
+      const customerAge = typeof intentData.customerAge === 'number' ? intentData.customerAge : null;
+      const customerHotel = intentData.customerHotel ? String(intentData.customerHotel) : null;
       const customerCountry =
         (orderData?.customer?.country ? String(orderData.customer.country) : '') ||
         (intentData.customerCountry ? String(intentData.customerCountry) : '') ||
@@ -900,6 +902,8 @@ export async function POST(request: Request) {
                 customerDocument: customerDocument || null,
                 customerDocumentNormalized: normalizeDigits(customerDocument),
                 customerBirthDate,
+                customerAge,
+                customerHotel,
                 customerComments: intentComments || null,
                 passengerDetails,
                 reservationCode,
@@ -1374,6 +1378,8 @@ export async function POST(request: Request) {
     const customerPhone = payer?.phone?.number || intentPhone || '';
     const customerDocument = payer?.identification?.number || intentDocument || '';
     const customerBirthDate = intentBirthDate ? String(intentBirthDate) : null;
+    const customerAge = typeof intentData.customerAge === 'number' ? intentData.customerAge : null;
+    const customerHotel = intentData.customerHotel ? String(intentData.customerHotel) : null;
     const customerCountry = (intentCountry ? String(intentCountry) : '') || payer?.address?.country || null;
     const passengerDetails = Array.isArray(intentPassengerDetails) ? intentPassengerDetails : null;
 
@@ -1554,6 +1560,8 @@ export async function POST(request: Request) {
             customerDocument: customerDocument || null,
             customerDocumentNormalized: normalizeDigits(customerDocument),
             customerBirthDate,
+            customerAge,
+            customerHotel,
             customerComments: intentComments || null,
             passengerDetails,
             reservationCode,

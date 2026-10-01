@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Paquete } from '@/types';
@@ -129,6 +130,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
   const [monthDirection, setMonthDirection] = useState<1 | -1>(1);
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const [tooltipInfo, setTooltipInfo] = useState<{ visible: boolean; x: number; y: number; date: string }>({ visible: false, x: 0, y: 0, date: '' });
+  const [mounted, setMounted] = useState(false);
   const [pax, setPax] = useState<PeopleBreakdown>(() =>
     normalizePeopleBreakdown({ breakdown: null, categories: peopleCategories })
   );
@@ -218,6 +220,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
 
   const closeModal = () => setStep('people');
 
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!tooltipInfo.visible) return;
     const handler = () => setTooltipInfo({ visible: false, x: 0, y: 0, date: '' });
@@ -302,7 +306,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-3xl border border-[#D4E6F7] bg-white p-4 shadow-[0_14px_34px_rgba(15,66,116,0.08)] sm:p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-black">
             Reserva directa
@@ -324,7 +328,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
               </div>
 
               <div className="mt-1 flex items-end gap-3">
-                <div className="text-[44px] leading-none font-black tracking-[-0.03em] text-black">
+                <div className="text-[36px] leading-none font-black tracking-[-0.03em] text-black sm:text-[44px]">
                   ${specialPrice.toLocaleString('es-AR')}
                 </div>
                 <div className="mb-2 text-sm font-extrabold uppercase text-black">{paquete.moneda || 'ARS'}</div>
@@ -336,7 +340,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
             </div>
           ) : (
             <div className="mt-1 flex items-end gap-3">
-              <div className="text-[44px] leading-none font-black tracking-[-0.02em] text-black">
+                <div className="text-[36px] leading-none font-black tracking-[-0.02em] text-black sm:text-[44px]">
                 ${paquete.precio.toLocaleString('es-AR')}
               </div>
               <div className="mb-2 text-sm font-extrabold uppercase text-gray-600">{paquete.moneda || 'ARS'}</div>
@@ -506,7 +510,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
         </div>
       </div>
 
-      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="text-sm font-bold text-black">¿Tenés dudas?</div>
         <div className="mt-2 flex items-start gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
@@ -521,7 +525,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
         </div>
       </div>
 
-      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex items-center gap-2 text-sm font-bold text-black">
           <ShieldCheck className="h-4 w-4 text-success" />
           Comprás tranquila
@@ -536,11 +540,12 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
         </div>
       </div>
 
-      <AnimatePresence>
-        {bookingEnabled && step !== 'people' ? (
+      {mounted ? createPortal(
+        <AnimatePresence>
+          {bookingEnabled && step !== 'people' ? (
           <motion.div
             key="booking-modal"
-            className="fixed inset-0 z-50 flex min-h-full items-center justify-center overflow-y-auto bg-black/45 p-4 backdrop-blur-[3px]"
+            className="fixed inset-0 z-[300] flex min-h-full items-center justify-center overflow-y-auto bg-black/45 p-4 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -554,7 +559,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
               role="dialog"
               aria-modal="true"
               aria-label="Elegí tu reserva"
-              className="my-auto flex w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+              className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:max-h-[calc(100vh-2rem)]"
             >
               <div className="relative border-b border-gray-100 px-5 pb-4 pt-5">
                 <button
@@ -933,8 +938,10 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
               </div>
             </motion.div>
           </motion.div>
-        ) : null}
-      </AnimatePresence>
+          ) : null}
+        </AnimatePresence>,
+        document.body
+      ) : null}
       {tooltipInfo.visible && (
         <div
           className="fixed z-50 w-64 rounded-2xl border border-[#D4E6F7] bg-white p-4 shadow-[0_16px_36px_rgba(15,66,116,0.12)]"
