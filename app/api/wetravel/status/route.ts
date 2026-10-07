@@ -28,6 +28,18 @@ export async function GET(request: Request) {
     reservationId: reservationId || null,
     reservationCode: reservation?.reservationCode || null,
     reservationStatus: reservation?.status || null,
+    reservation: reservation ? {
+      title: reservation.packageTitle || reservation.experienceTitle || null,
+      slug: reservation.packageSlug || reservation.experienceSlug || null,
+      date: reservation.date || null,
+      people: typeof reservation.people === 'number' ? reservation.people : null,
+      amountTotal: typeof reservation.amountTotal === 'number' ? reservation.amountTotal : null,
+      currency: reservation.currency || null,
+      paymentMethod: reservation.paymentMethod || 'wetravel',
+      extras: Array.isArray(reservation.selectedExtras)
+        ? reservation.selectedExtras.map((extra: any) => String(extra?.label ?? '')).filter(Boolean)
+        : [],
+    } : null,
     emailJobs: { cliente: jobs[0].exists() ? String(jobs[0].data()?.status || 'pending') : 'missing', voucher: jobs[1].exists() ? String(jobs[1].data()?.status || 'pending') : 'missing', admin: jobs[2].exists() ? String(jobs[2].data()?.status || 'pending') : 'missing' },
   });
 }

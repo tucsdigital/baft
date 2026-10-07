@@ -1,11 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+﻿import { test, expect, type Page } from '@playwright/test';
 
 test.setTimeout(60000);
 test.use({ actionTimeout: 20000 });
 const key = 'wetravel_tracking_v1_' + JSON.stringify(['e2e-wetravel', 'sin-fecha', 1, {}, []]);
 const paymentUrl = 'https://www.wetravel.com/checkout/e2e-mocked';
 const pending = { status: 'pending', paymentStatus: 'pending' };
-const confirmed = { status: 'completed', paymentStatus: 'paid', reservationId: 'r-test', reservationCode: 'BAFT-TEST', reservationStatus: 'reserved' };
+const confirmed = { status: 'completed', paymentStatus: 'paid', reservationId: 'r-test', reservationCode: 'BAFT-TEST', reservationStatus: 'reserved', reservation: { title: 'Test Tour', slug: 'e2e-wetravel', date: 'sin-fecha', people: 2, amountTotal: 25000, currency: 'usd', paymentMethod: 'wetravel', extras: [] } };
 
 async function restore(page: Page) {
   await page.addInitScript(({ key, paymentUrl }) => {
@@ -27,7 +27,7 @@ test('mobile: restored checkout opens a safe new tab, reuses link and follows ve
   page.on('request', request => { if (request.url().includes('/api/') && request.method() === 'POST') writes++; });
   await page.route('**/api/wetravel/status?*', route => route.fulfill({ json: status }));
   await page.goto('/en/checkout/testing?slug=e2e-wetravel&date=sin-fecha&people=1&ref=test');
-  const link = page.getByRole('link', { name: 'Open secure payment on WeTravel' });
+  const link = page.getByRole('link', { name: 'Open WeTravel' });
   await expect(link).toHaveAttribute('target', '_blank', { timeout: 20000 });
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   const popupEvent = page.waitForEvent('popup');
@@ -46,7 +46,9 @@ test('mobile: restored checkout opens a safe new tab, reuses link and follows ve
   await expect(page).toHaveURL(/\/en\/checkout\/success\?/);
   expect(new URL(page.url()).searchParams.get('ref')).toBe('test');
   expect(new URL(page.url()).searchParams.get('intentId')).toBe('test-intent');
-  await expect(page.getByRole('heading', { name: 'Payment and reservation confirmed' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your booking is confirmed!' })).toBeVisible();
+  await expect(page.getByText('BAFT-TEST')).toBeVisible();
+  await expect(page.getByText('Test Tour')).toBeVisible();
   expect(writes).toBe(0);
 });
 
@@ -56,21 +58,21 @@ test('paid without reservation does not redirect or offer another payment; failu
   let requests = 0;
   await page.route('**/api/wetravel/status?*', route => { requests++; return route.fulfill({ json: status }); });
   await page.goto('/es/checkout/testing');
-  await expect(page.getByRole('heading', { name: 'Pago recibido, procesando reserva' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Abrir pago/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Pago recibido' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Abrir WeTravel/ })).toHaveCount(0);
   status = { status: 'needs_review', paymentStatus: 'disputed' };
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('heading', { name: 'Tu pago requiere revisión' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tu pago necesita revisión' })).toBeVisible();
   const before = requests;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(3300);
   expect(requests).toBe(before);
   status = { status: 'failed', paymentStatus: 'failed' };
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'El intento de pago no se completó' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No se pudo completar el pago' })).toBeVisible();
   await page.getByRole('button', { name: 'Volver al checkout' }).click();
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
-  await expect(page.getByTestId('wetravel-tracking')).toHaveCount(0);
+  await expect(page.getByTestId('wetravel-modal')).toHaveCount(0);
 });
 
 test('transient errors recover and ten-minute timeout never becomes a rejection', async ({ page }) => {
@@ -81,13 +83,13 @@ test('transient errors recover and ten-minute timeout never becomes a rejection'
   await expect(page.getByText(/We could not check the status/)).toBeVisible();
   fail = false;
   await page.getByRole('button', { name: 'Check again' }).click();
-  await expect(page.getByRole('link', { name: /Open secure payment/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open WeTravel/ })).toBeVisible();
   await expect(page.getByText(/We could not check the status/)).toHaveCount(0);
   await page.clock.install();
   await page.clock.fastForward(10 * 60 * 1000 + 1000);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(/We are still waiting for confirmation/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Waiting for payment' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Complete your payment on WeTravel' })).toBeVisible();
   await page.getByRole('button', { name: 'Check again' }).click();
   await expect(page.getByText(/We are still waiting for confirmation/)).toHaveCount(0);
 });
@@ -97,7 +99,7 @@ test('pauses when hidden and verifies immediately on visibility return', async (
   let requests = 0;
   await page.route('**/api/wetravel/status?*', route => { requests++; return route.fulfill({ json: pending }); });
   await page.goto('/en/checkout/testing');
-  await expect(page.getByRole('link', { name: /Open secure payment/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open WeTravel/ })).toBeVisible();
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -134,13 +136,14 @@ for (const country of ['Chile', 'Argentina']) {
     await page.getByRole('button', { name: 'Pagar con', exact: true }).click();
     await page.getByRole('button', { name: /Pagar con.*(?:WeTravel|WeeTravel|Mercado Pago)/i }).click();
     if (method === 'wetravel') {
-      await expect(page.getByRole('link', { name: /Abrir pago seguro/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: /Abrir WeTravel/ })).toBeVisible();
       await expect(page).toHaveURL(/\/es\/checkout\/testing$/);
       await page.reload();
-      await expect(page.getByRole('link', { name: /Abrir pago seguro/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: /Abrir WeTravel/ })).toBeVisible();
     } else {
       await expect(page).toHaveURL('https://www.mercadopago.com.ar/mock');
     }
     expect(calls).toBe(1);
   });
 }
+

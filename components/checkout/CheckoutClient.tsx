@@ -18,7 +18,7 @@ import { applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
 import { buildLeadTimeMessage, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 import type { PeopleBreakdown } from '@/lib/packages/people-categories';
 import { useTranslations } from 'next-intl';
-import WeTravelVerification from './WeTravelVerification';
+import WeTravelPaymentModal from './WeTravelPaymentModal';
 import { parseWeTravelTrackingSession, type WeTravelTrackingSession } from '@/lib/wetravel-tracking';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -133,12 +133,15 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   const [restored, setRestored] = useState(false);
   const [weTravelSession, setWeTravelSession] = useState<WeTravelTrackingSession | null>(null);
   const [trackingRestored, setTrackingRestored] = useState(false);
+  const [weTravelModalOpen, setWeTravelModalOpen] = useState(false);
   const trackingStorageKey = `wetravel_tracking_v1_${JSON.stringify([experience.slug, date, travelerCount, pax ?? {}, (selectedAddons ?? []).map(addon => addon.id).sort()])}`;
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(trackingStorageKey);
-      setWeTravelSession(raw ? parseWeTravelTrackingSession(JSON.parse(raw)) : null);
+      const restoredSession = raw ? parseWeTravelTrackingSession(JSON.parse(raw)) : null;
+      setWeTravelSession(restoredSession);
+      setWeTravelModalOpen(Boolean(restoredSession));
     } catch { /* Storage may be unavailable in private browsing. */ }
     setTrackingRestored(true);
   }, [trackingStorageKey]);
@@ -388,13 +391,23 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   };
 
   const createPaymentPreference = async (method: PaymentMethod = paymentMethod ?? countryPaymentMethod ?? 'mercadopago') => {
-    if (isLoading || weTravelSession || !trackingRestored) return;
+    if (isLoading || !trackingRestored) return;
+    if (method === 'wetravel' && weTravelSession) {
+      setWeTravelModalOpen(true);
+      return;
+    }
+    if (weTravelSession) return;
     if (blockedError) {
       setError(blockedError);
       return;
     }
     setError(null);
     setIsLoading(true);
+    // Open the tab synchronously with the click so browsers do not block it.
+    let paymentTab: Window | null = null;
+    if (method === 'wetravel') {
+      try { paymentTab = window.open('about:blank', '_blank'); } catch { paymentTab = null; }
+    }
 
     try {
       const baseUrl = getSiteUrl();
@@ -456,11 +469,16 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
         if (!session || data.provider !== 'wetravel') throw new Error(t('paymentUrlError'));
         setWeTravelSession(session);
         try { sessionStorage.setItem(trackingStorageKey, JSON.stringify(session)); } catch { /* Keep tracking in memory. */ }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (paymentTab && !paymentTab.closed) {
+          try { paymentTab.opener = null; } catch { /* Best effort. */ }
+          paymentTab.location.href = session.url;
+        }
+        setWeTravelModalOpen(true);
       } else {
         window.location.href = data.url;
       }
     } catch (err) {
+      try { paymentTab?.close(); } catch { /* Ignore. */ }
       setError(err instanceof Error ? err.message : 'No se pudo iniciar el pago.');
     } finally {
       setIsLoading(false);
@@ -469,18 +487,23 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
   if (!trackingRestored) return <div className="flex min-h-64 items-center justify-center" role="status"><Loader2 className="mr-2 h-5 w-5 animate-spin" />{t('checkingPayment')}</div>;
 
-  if (weTravelSession) return (
-    <div className="min-h-screen bg-[#F5FAFF] px-4 py-10 md:px-6">
-      <WeTravelVerification key={weTravelSession.intentId} intentId={weTravelSession.intentId} paymentUrl={weTravelSession.url} redirectOnConfirmed onBack={() => {
-        try { sessionStorage.removeItem(trackingStorageKey); } catch { /* Storage is optional. */ }
-        setWeTravelSession(null);
-        setStep('form');
-      }} />
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#F5FAFF] px-4 py-10 md:px-6 lg:px-8">
+      {weTravelSession ? (
+        <WeTravelPaymentModal
+          key={weTravelSession.intentId}
+          open={weTravelModalOpen}
+          onOpenChange={setWeTravelModalOpen}
+          intentId={weTravelSession.intentId}
+          paymentUrl={weTravelSession.url}
+          onBack={() => {
+            try { sessionStorage.removeItem(trackingStorageKey); } catch { /* Storage is optional. */ }
+            setWeTravelModalOpen(false);
+            setWeTravelSession(null);
+            setStep('form');
+          }}
+        />
+      ) : null}
       <div className="mx-auto max-w-6xl">
         <div className="mb-6">
           <Link

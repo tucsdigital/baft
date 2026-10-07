@@ -6,7 +6,8 @@ import { getPaqueteBySlug } from '@/lib/paquetes';
 import ClearCheckoutStorage from '@/components/checkout/ClearCheckoutStorage';
 import SuccessVerification from '@/components/checkout/SuccessVerification';
 import DirectVerification from '@/components/checkout/DirectVerification';
-import WeTravelVerification from '@/components/checkout/WeTravelVerification';
+import WeTravelSuccess from '@/components/checkout/WeTravelSuccess';
+import SuccessConfirmation from '@/components/checkout/SuccessConfirmation';
 import OrderVerification from '@/components/checkout/OrderVerification';
 import { CONTACT_INFO, SITE_NAME, SOCIAL_MEDIA } from '@/lib/constants';
 import { db } from '@/lib/firebase';
@@ -175,12 +176,10 @@ export default async function CheckoutSuccessPage({
   const locale = (await getLocale()) as AppLocale;
   const t = await getTranslations('success');
   if (params.paymentMethod === 'wetravel') {
-    const common = await getTranslations('common');
     return <>
       <Navbar variant="homeMockup" reserveSpace />
-      <main className="min-h-screen bg-[#F5FAFF] px-4 py-10">
-        <WeTravelVerification intentId={params.intentId?.trim() || ''} />
-        <div className="mt-6 text-center"><Link href={`/${locale}`} className="inline-flex min-h-11 items-center underline">{common('home')}</Link></div>
+      <main className="min-h-screen bg-gradient-to-b from-emerald-50/60 via-white to-slate-50">
+        <WeTravelSuccess intentId={params.intentId?.trim() || ''} />
       </main>
     </>;
   }
@@ -323,6 +322,27 @@ export default async function CheckoutSuccessPage({
             ? 'bg-amber-500/15 text-amber-700'
             : 'bg-red-500/10 text-red-600';
 
+  if (orderId && reservationReady && heading?.tone === 'success') {
+    return (
+      <div className="min-h-screen bg-white">
+        <ClearCheckoutStorage slug={slug} date={date} people={people} />
+        <Navbar variant="homeMockup" reserveSpace />
+        <SuccessConfirmation
+          code={reservationCodeValues.map((r) => r.code).join(' · ')}
+          title={title}
+          date={resolvedDate}
+          people={Number(primaryItem?.people) || people || null}
+          amountTotal={orderAmount || null}
+          currency={orderCurrency}
+          extras={selectedExtras.map((extra: any) => String(extra?.label ?? '')).filter(Boolean)}
+          location={locationLabel}
+          slug={slug || String(primaryItem?.packageSlug || '') || null}
+          paymentMethod="mercadopago"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F9FAFB]">
       <ClearCheckoutStorage slug={slug} date={date} people={people} />
@@ -438,8 +458,7 @@ export default async function CheckoutSuccessPage({
               initialPaymentApproved={mpReturnStatus === 'approved'}
             />
           ) : (hasSession ? <SuccessVerification sessionId={sessionId} /> : intentId ? (
-            params.paymentMethod === 'wetravel' ? <WeTravelVerification intentId={intentId} /> :
-              <DirectVerification intentId={intentId} paymentId={paymentId} />
+            <DirectVerification intentId={intentId} paymentId={paymentId} />
           ) : null)}
 
           <div className="mt-8 space-y-4">
