@@ -2,7 +2,7 @@
 
 import { motion, Variants } from 'framer-motion';
 import ContactSection from '@/components/ContactSection';
-import { siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 const defaultVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -38,7 +38,8 @@ export default function ContactSectionBlock({
   fadeInScaleVariants = defaultVariants,
   staggerFastVariants = defaultStagger,
 }: ContactSectionBlockProps = {}) {
-  const content = siteConfig.content.contactBlock;
+  const t = useTranslations('home.contactBlock');
+  const content = { badge: t('badge'), titlePrefix: t('titlePrefix'), titleAccent: t('titleAccent'), subtitle: t('subtitle') };
   const lineRevealVariants: Variants = {
     hidden: { y: '100%' },
     visible: {

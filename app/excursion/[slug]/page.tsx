@@ -24,6 +24,9 @@ import { getAvailableForPackageDate } from '@/lib/cart/server';
 import { sanitizePackageRichHtml } from '@/lib/packages/rich-text-sanitize';
 import { extractPlainTextFromRichText } from '@/lib/packages/rich-text-validation';
 import { buildPageTitle } from '@/lib/siteConfig';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { localizePaquete, localizeCategoria } from '@/lib/i18n/cms-content';
+import type { AppLocale } from '@/i18n/routing';
 
 /** Sin caché: los cambios del admin se ven de inmesdiato */
 export const revalidate = 0;
@@ -96,68 +99,78 @@ async function getPrimaryDestino(paquete: Paquete): Promise<Categoria | null> {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
   if (!firebaseEnabled) {
     const siteUrl = SITE_URL;
-    const url = `${siteUrl}/excursion/${slug}`;
+    const url = `${siteUrl}/${locale}/excursion/${slug}`;
     return {
       title: buildPageTitle(slug),
-      description: `Excursión ${slug} en ${SITE_NAME}.`,
+      description: locale === 'en' ? `Excursion ${slug} at ${SITE_NAME}.` : `Excursión ${slug} en ${SITE_NAME}.`,
       alternates: { canonical: url },
     };
   }
   const paquete = await getPaquete(slug);
 
   if (!paquete) {
+    const x = await getTranslations('excursionPage');
     return {
-      title: 'Excursión no encontrada',
+      title: x('notFound'),
     };
   }
 
+  const localizedPaquete = await localizePaquete(paquete, locale);
   const siteUrl = SITE_URL;
-  const url = `${siteUrl}/excursion/${slug}`;
+  const url = `${siteUrl}/${locale}/excursion/${slug}`;
+  const spanishUrl = `${siteUrl}/es/excursion/${slug}`;
+  const englishUrl = `${siteUrl}/en/excursion/${slug}`;
 
   const cleanDescription =
-    paquete.descripcionCorta ||
-    `${extractPlainTextFromRichText(paquete.descripcionLarga || paquete.descripcion).substring(0, 160).trim()}...`;
+    localizedPaquete.descripcionCorta ||
+    `${extractPlainTextFromRichText(localizedPaquete.descripcionLarga || localizedPaquete.descripcion).substring(0, 160).trim()}...`;
 
-  const coverImage = paquete.imagenPortada || paquete.imagenTarjeta || paquete.imagenPrincipal;
+  const coverImage = localizedPaquete.imagenPortada || localizedPaquete.imagenTarjeta || localizedPaquete.imagenPrincipal;
 
   return {
-    title: buildPageTitle(paquete.titulo),
+    title: buildPageTitle(localizedPaquete.titulo),
     description: cleanDescription,
     alternates: {
       canonical: url,
+      languages: { es: spanishUrl, en: englishUrl, 'x-default': spanishUrl },
     },
     openGraph: {
       type: 'website',
       url,
-      title: buildPageTitle(paquete.titulo),
+      title: buildPageTitle(localizedPaquete.titulo),
       description: cleanDescription,
       siteName: SITE_NAME,
-      locale: 'es_AR',
+      locale: locale === 'en' ? 'en_US' : 'es_AR',
       images: coverImage
         ? [
           {
             url: coverImage,
             width: 1200,
             height: 630,
-            alt: paquete.titulo,
+            alt: localizedPaquete.titulo,
           },
         ]
         : [],
     },
     twitter: {
       card: 'summary_large_image',
-      title: buildPageTitle(paquete.titulo),
+      title: buildPageTitle(localizedPaquete.titulo),
       description: cleanDescription,
       images: coverImage ? [coverImage] : [],
     },
-    keywords: [paquete.titulo, paquete.destino || 'destino', 'excursiones', 'viajes', 'turismo', SITE_NAME],
+    keywords: [localizedPaquete.titulo, localizedPaquete.destino || (locale === 'en' ? 'destination' : 'destino'), locale === 'en' ? 'excursions' : 'excursiones', locale === 'en' ? 'travel' : 'viajes', locale === 'en' ? 'tourism' : 'turismo', SITE_NAME],
   };
 }
 
 export default async function ExcursionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
+  const p = await getTranslations('public');
+  const common = await getTranslations('common');
+  const x = await getTranslations('excursionPage');
   if (!firebaseEnabled) {
     return (
       <>
@@ -170,7 +183,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
                 {slug}
               </h1>
               <p className="font-body text-base leading-relaxed text-gray-700 md:text-lg">
-                Este contenido requiere configuración de Firebase para mostrarse.
+                {x('firebaseRequired')}
               </p>
             </div>
           </div>
@@ -179,13 +192,16 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
       </>
     );
   }
-  const paquete = await getPaquete(slug);
+  const paqueteBase = await getPaquete(slug);
 
-  if (!paquete) {
+  if (!paqueteBase) {
     notFound();
   }
 
-  const destinoCategoria = await getPrimaryDestino(paquete);
+  const paquete = await localizePaquete(paqueteBase, locale);
+
+  const destinoCategoriaBase = await getPrimaryDestino(paqueteBase);
+  const destinoCategoria = destinoCategoriaBase ? await localizeCategoria(destinoCategoriaBase, locale) : null;
 
   const images = Array.from(new Set((paquete.galeria ?? []).map((s) => String(s || '').trim()).filter(Boolean)));
   const short = (paquete.descripcionCorta || '').trim();
@@ -211,16 +227,16 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
       <WhatsAppButton />
       <main className="container mx-auto px-4 pb-24 pt-4 sm:pb-28 sm:pt-6 md:px-6 md:py-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#6A86A6] md:text-sm">
-          <Link href="/" className="hover:text-[#2BB8BF]">
-            Inicio
+          <Link href={`/${locale}`} className="hover:text-[#2BB8BF]">
+            {common('home')}
           </Link>
           <span className="mx-2">›</span>
-          <Link href="/excursiones" className="hover:text-[#2BB8BF]">
-            Excursiones
+          <Link href={`/${locale}/excursiones`} className="hover:text-[#2BB8BF]">
+            {common('excursions')}
           </Link>
           <span className="mx-2">›</span>
           {destinoCategoria?.slug ? (
-            <Link href={`/destinos/${destinoCategoria.slug}`} className="hover:text-[#2BB8BF]">
+            <Link href={`/${locale}/destinos/${destinoCategoria.slug}`} className="hover:text-[#2BB8BF]">
               {destinoCategoria.nombre}
             </Link>
           ) : (
@@ -243,7 +259,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
                   {paquete.titulo}
                 </h1>
                 <p className="mt-3 text-sm leading-relaxed text-[#537190] sm:text-base">
-                  {short || 'Naturaleza imponente, aventura y confort en una experiencia única.'}
+                  {short || (locale === 'en' ? 'Breathtaking nature, adventure and comfort in a unique experience.' : 'Naturaleza imponente, aventura y confort en una experiencia única.')}
                 </p>
                 <div className="mt-3 inline-flex max-w-full items-start gap-2 text-xs font-semibold text-[#2A4E74] sm:text-sm">
                   <MapPin className="h-4 w-4 shrink-0 text-[#2BB8BF]" />
@@ -256,7 +272,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
                   />
                 ) : (
                   <p className="mt-5 text-sm leading-7 text-[#415F7E] sm:text-base">
-                    Descubrí paisajes inolvidables y experiencias únicas con un programa premium que combina excursiones, alojamientos seleccionados y servicios exclusivos.
+                    {locale === 'en' ? 'Discover unforgettable landscapes and unique experiences with a premium program combining excursions, selected accommodations and exclusive services.' : 'Descubrí paisajes inolvidables y experiencias únicas con un programa premium que combina excursiones, alojamientos seleccionados y servicios exclusivos.'}
                   </p>
                 )}
               </div>
@@ -282,7 +298,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
             {(paquete.incluye.length > 0 || (paquete.noIncluye && paquete.noIncluye.length > 0)) && (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-3xl border border-[#D8EFE0] bg-[#F5FFF7] p-4 shadow-[0_12px_28px_rgba(28,122,67,0.08)] sm:p-5">
-                  <h3 className="text-lg font-extrabold text-[#1A7E4F]">Incluye</h3>
+                  <h3 className="text-lg font-extrabold text-[#1A7E4F]">{p('includes')}</h3>
                   <ul className="mt-3 space-y-2.5">
                     {paquete.incluye.map((item, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm leading-6 text-[#27694B]">
@@ -293,7 +309,7 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
                   </ul>
                 </div>
                 <div className="rounded-3xl border border-[#F1DCDC] bg-[#FFF8F8] p-4 shadow-[0_12px_28px_rgba(154,58,58,0.08)] sm:p-5">
-                  <h3 className="text-lg font-extrabold text-[#A13C3C]">No incluye</h3>
+                  <h3 className="text-lg font-extrabold text-[#A13C3C]">{p('notIncludes')}</h3>
                   <ul className="mt-3 space-y-2.5">
                     {(paquete.noIncluye || []).map((item, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm leading-6 text-[#7F3A3A]">
@@ -309,33 +325,33 @@ export default async function ExcursionPage({ params }: { params: Promise<{ slug
             <PaqueteGoogleMap title={paquete.titulo} embedUrl={paquete.mapaGoogleEmbedUrl} />
 
             <div className="rounded-3xl border border-[#D4E6F7] bg-white p-5 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
-              <h3 className="text-sm font-bold text-[#17395E]">Compartí esta experiencia</h3>
+              <h3 className="text-sm font-bold text-[#17395E]">{x('shareExperience')}</h3>
               <div className="mt-3 flex items-center gap-2.5">
                 <button
                   type="button"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D7E8F7] bg-white text-[#2C4E73] hover:bg-[#F4FAFF]"
-                  aria-label="Compartir por WhatsApp"
+                  aria-label={x('shareWhatsApp')}
                 >
                   <Phone className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D7E8F7] bg-white text-[#2C4E73] hover:bg-[#F4FAFF]"
-                  aria-label="Compartir en Facebook"
+                  aria-label={x('shareFacebook')}
                 >
                   <Facebook className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D7E8F7] bg-white text-[#2C4E73] hover:bg-[#F4FAFF]"
-                  aria-label="Compartir en Instagram"
+                  aria-label={x('shareInstagram')}
                 >
                   <Instagram className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D7E8F7] bg-white text-[#2C4E73] hover:bg-[#F4FAFF]"
-                  aria-label="Copiar enlace"
+                  aria-label={x('copyLinkAction')}
                 >
                   <Link2 className="h-4 w-4" />
                 </button>

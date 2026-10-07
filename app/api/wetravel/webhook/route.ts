@@ -1,22 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { verifyWeTravelSignature } from '@/lib/wetravel-webhook-signature';
 import { arrayUnion, collection, doc, getDocs, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { normalizeWeTravelEvent } from '@/lib/wetravel-events';
 import { finalizeWeTravelPaidCheckout, releaseWeTravelHold } from '@/lib/wetravel-finalize';
 
 export const runtime = 'nodejs';
-
-function verifySignature(raw: string, request: Request) {
-  const secret = String(process.env.WETRAVEL_WEBHOOK_SECRET || '').trim();
-  if (!secret) return true;
-  const supplied = String(request.headers.get('x-wetravel-signature') || request.headers.get('x-webhook-signature') || '').trim();
-  if (!supplied) return false;
-  const expected = createHmac('sha256', secret).update(raw).digest('hex');
-  const normalized = supplied.replace(/^sha256=/i, '').trim();
-  if (expected.length !== normalized.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(normalized));
-}
 
 async function findIntent(event: ReturnType<typeof normalizeWeTravelEvent>) {
   if (event.externalId) {
@@ -32,7 +21,9 @@ async function findIntent(event: ReturnType<typeof normalizeWeTravelEvent>) {
 
 export async function POST(request: Request) {
   const raw = await request.text();
-  if (!verifySignature(raw, request)) return NextResponse.json({ error: 'Firma inválida o ausente.' }, { status: 401 });
+  const secret = String(process.env.WETRAVEL_WEBHOOK_SECRET || '').trim();
+  if (!secret) return NextResponse.json({ error: 'Webhook no configurado.' }, { status: 503 });
+  if (!verifyWeTravelSignature(raw, request.headers, secret)) return NextResponse.json({ error: 'Firma inválida o ausente.' }, { status: 401 });
   let payload: any;
   try {
     payload = JSON.parse(raw || '{}');
@@ -41,6 +32,8 @@ export async function POST(request: Request) {
   }
 
   const event = normalizeWeTravelEvent(payload);
+  // Delivery identity is authenticated by Svix, not a nested buyer/participant ID.
+  event.eventId = request.headers.get('svix-id')!;
   const { raw: _rawEvent, ...normalizedEvent } = event;
   const eventId = event.eventId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 150);
   const eventRef = doc(db, 'wetravelEvents', eventId);

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Calendar, ChevronDown, MapPin, Search, User, X } from "lucide-react";
 import type { Paquete } from "@/types";
 
@@ -10,6 +11,8 @@ type Props = {
 };
 
 export default function HomeSearchBar({ paquetes }: Props) {
+  const locale = useLocale();
+  const t = useTranslations('public');
   const router = useRouter();
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -49,7 +52,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
   const formatMes = (yyyyMm: string) => {
     const [y, m] = yyyyMm.split("-");
     const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1);
-    return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+    return date.toLocaleDateString(locale === 'en' ? "en-US" : "es-AR", { month: "long", year: "numeric" });
   };
 
   const suggestions = useMemo(() => {
@@ -111,7 +114,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
     else if (selectedDestino) params.set("destino", selectedDestino);
     else if (q.trim()) params.set("q", q.trim());
     if (mes) params.set("mes", mes);
-    router.push(params.toString() ? `/excursiones?${params.toString()}` : "/excursiones");
+    router.push(params.toString() ? `/${locale}/excursiones?${params.toString()}` : `/${locale}/excursiones`);
   };
 
   return (
@@ -121,7 +124,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
           <div className="flex items-center gap-3 rounded-2xl lg:rounded-[22px] px-4 py-3 lg:py-4 hover:bg-black/[0.02] transition-colors">
             <MapPin className="h-5 w-5 text-[#0B6B8A]" />
             <div className="w-full">
-              <div className="text-[11px] font-semibold text-gray-500">¿A dónde querés viajar?</div>
+              <div className="text-[11px] font-semibold text-gray-500">{t('whereTravel')}</div>
               <div className="flex items-center gap-2">
                 <input
                   value={q}
@@ -133,7 +136,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
                   }}
                   onFocus={() => setShowSuggestions(true)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Destino o excursión"
+                  placeholder={t('searchDestinationOrExcursion')}
                   className="w-full bg-transparent outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400"
                   role="combobox"
                   aria-expanded={showSuggestions}
@@ -148,7 +151,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
                       setSelectedDestino(null);
                     }}
                     className="p-1.5 rounded-full hover:bg-gray-100"
-                    aria-label="Limpiar"
+                    aria-label={t('clearSearch')}
                   >
                     <X className="h-4 w-4 text-gray-500" />
                   </button>
@@ -161,7 +164,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
             <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50">
               {suggestions.destinos.length > 0 && (
                 <div className="py-2">
-                  <div className="px-4 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Destinos</div>
+                  <div className="px-4 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{t('suggestedDestinations')}</div>
                   {suggestions.destinos.map((dest, idx) => (
                     <div
                       key={`dest-${idx}`}
@@ -179,7 +182,7 @@ export default function HomeSearchBar({ paquetes }: Props) {
               )}
               {suggestions.paquetes.length > 0 && (
                 <div className="py-2 border-t border-gray-50">
-                  <div className="px-4 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Excursiones</div>
+                  <div className="px-4 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{t('suggestedExcursions')}</div>
                   {suggestions.paquetes.map((paq, idx) => {
                     const globalIdx = suggestions.destinos.length + idx;
                     return (
@@ -211,14 +214,14 @@ export default function HomeSearchBar({ paquetes }: Props) {
           <div className="flex items-center gap-3 rounded-2xl lg:rounded-[22px] px-4 py-3 lg:py-4 hover:bg-black/[0.02] transition-colors">
             <Calendar className="h-5 w-5 text-[#0B6B8A]" />
             <div className="w-full">
-              <div className="text-[11px] font-semibold text-gray-500">Fecha</div>
+              <div className="text-[11px] font-semibold text-gray-500">{t('date')}</div>
               <div className="relative">
                 <select
                   value={mes}
                   onChange={(e) => setMes(e.target.value)}
                   className="w-full bg-transparent outline-none text-sm font-medium text-gray-900 appearance-none pr-8 cursor-pointer"
                 >
-                  <option value="">Cualquier fecha</option>
+                  <option value="">{t('anyDate')}</option>
                   {mesesDisponibles.map((m) => (
                     <option key={m} value={m}>
                       {formatMes(m)}

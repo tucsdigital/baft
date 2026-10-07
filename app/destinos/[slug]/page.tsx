@@ -12,6 +12,9 @@ import { serializeFirestoreData } from '@/lib/utils/serialize';
 import { SITE_NAME, SITE_URL } from '@/lib/constants';
 import { buildPageTitle, siteConfig } from '@/lib/siteConfig';
 import { getPaquetesByCategoria } from '@/lib/paquetes';
+import { getLocale } from 'next-intl/server';
+import type { AppLocale } from '@/i18n/routing';
+import { localizeCategoria, localizePaquete } from '@/lib/i18n/cms-content';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -61,8 +64,9 @@ async function getDestino(slug: string): Promise<Categoria | null> {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
   if (!firebaseEnabled) {
-    const url = `${SITE_URL}/destinos/${slug}`;
+    const url = `${SITE_URL}/${locale}/destinos/${slug}`;
     return {
       title: buildPageTitle(slug),
       description: `Destino ${slug} en ${SITE_NAME}.`,
@@ -77,58 +81,69 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const url = `${SITE_URL}/destinos/${slug}`;
+  const localizedDestino = await localizeCategoria(destino, locale);
+  const url = `${SITE_URL}/${locale}/destinos/${slug}`;
 
   return {
-    title: buildPageTitle(destino.nombre),
+    title: buildPageTitle(localizedDestino.nombre),
     description:
-      destino.descripcion ||
-      `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,
+      localizedDestino.descripcion ||
+      `${locale === 'en' ? 'Discover the best excursions in' : 'Descubrí las mejores excursiones en'} ${localizedDestino.nombre} ${locale === 'en' ? 'with' : 'con'} ${SITE_NAME}.`,
     alternates: {
       canonical: url,
+      languages: {
+        es: `${SITE_URL}/es/destinos/${slug}`,
+        en: `${SITE_URL}/en/destinos/${slug}`,
+        'x-default': `${SITE_URL}/es/destinos/${slug}`,
+      },
     },
     openGraph: {
       type: 'website',
       url,
-      title: buildPageTitle(destino.nombre),
+      title: buildPageTitle(localizedDestino.nombre),
       description:
-        destino.descripcion ||
-        `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,
+        localizedDestino.descripcion ||
+        `${locale === 'en' ? 'Discover the best excursions in' : 'Descubrí las mejores excursiones en'} ${localizedDestino.nombre} ${locale === 'en' ? 'with' : 'con'} ${SITE_NAME}.`,
       siteName: SITE_NAME,
-      locale: siteConfig.seo.locale,
+      locale: locale === 'en' ? 'en_US' : siteConfig.seo.locale,
       images: destino.imagen
         ? [
             {
               url: destino.imagen,
               width: 1200,
               height: 630,
-              alt: destino.nombre,
+            alt: localizedDestino.nombre,
             },
           ]
         : [],
     },
     twitter: {
       card: 'summary_large_image',
-      title: buildPageTitle(destino.nombre),
+      title: buildPageTitle(localizedDestino.nombre),
       description:
-        destino.descripcion ||
-        `Descubrí las mejores excursiones en ${destino.nombre} con ${SITE_NAME}.`,
+        localizedDestino.descripcion ||
+        `${locale === 'en' ? 'Discover the best excursions in' : 'Descubrí las mejores excursiones en'} ${localizedDestino.nombre} ${locale === 'en' ? 'with' : 'con'} ${SITE_NAME}.`,
       images: destino.imagen ? [destino.imagen] : [],
     },
-    keywords: [...siteConfig.seo.keywords, destino.nombre, 'viajes', 'turismo', 'excursiones', 'destinos'],
+    keywords: [...siteConfig.seo.keywords, localizedDestino.nombre, locale === 'en' ? 'travel' : 'viajes', locale === 'en' ? 'tourism' : 'turismo', locale === 'en' ? 'excursions' : 'excursiones', locale === 'en' ? 'destinations' : 'destinos'],
   };
 }
 
 export default async function DestinoPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
   const destino = await getDestino(slug);
 
   if (!destino) {
     notFound();
   }
 
-  const paquetes = await getPaquetesByCategoria(destino.id);
-  const heroSubtitle = buildDestinationHeroSubtitle(destino.descripcion);
+  const [localizedDestino, paquetesBase] = await Promise.all([
+    localizeCategoria(destino, locale),
+    getPaquetesByCategoria(destino.id),
+  ]);
+  const paquetes = await Promise.all(paquetesBase.map((paquete) => localizePaquete(paquete, locale)));
+  const heroSubtitle = buildDestinationHeroSubtitle(localizedDestino.descripcion);
 
   return (
     <>
@@ -136,9 +151,9 @@ export default async function DestinoPage({ params }: { params: Promise<{ slug: 
       <WhatsAppButton />
 
       <Hero
-        title={destino.nombre}
+        title={localizedDestino.nombre}
         subtitle={heroSubtitle}
-        backgroundImage={destino.imagen}
+        backgroundImage={localizedDestino.imagen}
         height="sm"
         contentVariant="compact"
       />

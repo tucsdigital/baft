@@ -1,16 +1,21 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useId, useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin, Calendar, X } from "lucide-react";
 import { Paquete } from "@/types";
 import { Button } from "@/components/ui/button";
+import { useLocale, useTranslations } from 'next-intl';
 
 interface HeroSearchProps {
   paquetes: Paquete[];
 }
 
 export default function HeroSearch({ paquetes }: HeroSearchProps) {
+  const p = useTranslations('public');
+  const locale = useLocale();
+  const suggestionsId = useId();
+  const common = useTranslations('common');
   const router = useRouter();
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -56,7 +61,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
   const formatMes = (yyyyMm: string) => {
     const [y, m] = yyyyMm.split("-");
     const date = new Date(parseInt(y), parseInt(m) - 1);
-    return date.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    return date.toLocaleDateString(locale, { month: "long", year: "numeric" });
   };
 
   const suggestions = useMemo(() => {
@@ -136,7 +141,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
       params.set("mes", mes);
     }
 
-    router.push(params.toString() ? `/excursiones?${params.toString()}` : "/excursiones");
+    router.push(`/${locale}/excursiones${params.size ? `?${params.toString()}` : ''}`);
   };
 
   return (
@@ -151,7 +156,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
             <Search className="mr-2 h-[13px] w-[13px] text-gray-400 md:mr-3 md:h-5 md:w-5" />
             <input 
               type="text"
-              placeholder="¿A dónde quieres viajar?"
+              placeholder={p('whereTravel')}
               className="w-full bg-transparent text-[12px] text-gray-700 outline-none placeholder:text-[11px] placeholder:text-gray-400 md:text-base md:placeholder:text-base"
               value={q}
               onChange={e => {
@@ -163,6 +168,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
               onFocus={() => setShowSuggestions(true)}
               onKeyDown={handleKeyDown}
               role="combobox"
+              aria-controls={suggestionsId}
               aria-expanded={showSuggestions}
               aria-autocomplete="list"
             />
@@ -175,10 +181,10 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
 
           {/* Autocomplete Dropdown */}
           {showSuggestions && (debouncedQ.trim().length > 0) && totalSuggestions > 0 && (
-            <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-[14px] border border-gray-100 bg-white shadow-2xl md:mt-2 md:rounded-xl">
+            <div id={suggestionsId} className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-[14px] border border-gray-100 bg-white shadow-2xl md:mt-2 md:rounded-xl">
               {suggestions.destinos.length > 0 && (
                 <div className="py-2">
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 md:px-4 md:text-xs">Destinos</div>
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 md:px-4 md:text-xs">{common('destinations')}</div>
                   {suggestions.destinos.map((dest, idx) => (
                     <div 
                       key={`dest-${idx}`}
@@ -193,7 +199,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
               )}
               {suggestions.paquetes.length > 0 && (
                 <div className="py-2 border-t border-gray-50">
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 md:px-4 md:text-xs">Excursiones</div>
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 md:px-4 md:text-xs">{common('excursions')}</div>
                   {suggestions.paquetes.map((paq, idx) => {
                     const globalIdx = suggestions.destinos.length + idx;
                     return (
@@ -225,7 +231,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
               onChange={(e) => setMes(e.target.value)}
               className="w-full cursor-pointer appearance-none truncate bg-transparent text-[12px] text-gray-700 outline-none md:text-sm"
             >
-              <option value="">Cualquier fecha</option>
+              <option value="">{p('anyDate')}</option>
               {mesesDisponibles.map((m) => (
                 <option key={m} value={m}>
                   {formatMes(m)}
@@ -240,7 +246,7 @@ export default function HeroSearch({ paquetes }: HeroSearchProps) {
           onClick={handleSearch}
           className="h-9 rounded-[12px] px-4 py-0 text-[12px] font-semibold text-white transition-colors hover:bg-primary/90 md:h-auto md:rounded-xl md:px-8 md:py-3 md:text-sm"
         >
-          Buscar
+          {p('searchAction')}
         </Button>
       </div>
     </div>

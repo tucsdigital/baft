@@ -173,6 +173,10 @@ BLOB_READ_WRITE_TOKEN=tu_vercel_blob_token
 # Site URL (opcional, para producción)
 NEXT_PUBLIC_SITE_URL=https://tu-dominio.com
 
+# Traducción automática server-only del contenido CMS (opcional)
+DEEPL_API_KEY=tu_deepl_api_key
+DEEPL_API_URL=https://api-free.deepl.com
+
 # Mercado Pago
 MERCADO_PAGO_ACCESS_TOKEN=tu_access_token
 MERCADO_PAGO_PUBLIC_KEY=tu_public_key
@@ -193,6 +197,14 @@ WETRAVEL_AUTH_URL=https://api.wetravel.com/v2/auth/tokens/access
 WETRAVEL_PARTICIPANT_FEES=service
 WETRAVEL_WEBHOOK_SECRET=tu_secreto_de_webhook
 ```
+
+### Idiomas del frontend
+
+El sitio público utiliza `/es/...` y `/en/...`; las rutas antiguas sin prefijo redirigen con HTTP 308 al idioma detectado. Admin, Vendedor, APIs y webhooks permanecen fuera del prefijo. `DEEPL_API_KEY` solo se usa en el servidor para traducir contenido CMS y las traducciones se cachean en Firestore en `translationCache`. Si DeepL no está configurado o falla, se muestra el contenido original en español.
+
+Los títulos, botones, formularios y secciones del inicio se traducen desde `messages/es.json` y `messages/en.json` y no requieren DeepL. Los títulos y descripciones cargados desde Admin sí requieren una clave válida de **DeepL API** (una suscripción al traductor web no equivale a acceso API). Configurar `DEEPL_API_KEY` y `DEEPL_API_URL` en `.env.local`, reiniciar `npm run dev`, y configurar las mismas variables en el entorno de despliegue antes de volver a desplegar. No usar el prefijo `NEXT_PUBLIC_` para la clave.
+
+`npm test` comprueba las referencias literales a mensajes en los componentes públicos, además de la paridad ES/EN. Para comprobar el inicio en navegador, ejecutar `npx playwright test e2e/i18n.spec.ts`; verifica títulos, tarjetas, cambio de idioma con query/hash y viewport móvil.
 
 ### Tareas programadas con GitHub Actions
 

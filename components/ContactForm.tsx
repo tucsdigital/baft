@@ -14,20 +14,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useTranslations } from 'next-intl';
 import type { Cliente } from '@/types';
 
-const formSchema = z.object({
+const createFormSchema = (t: (key: string) => string) => z.object({
   servicio: z.enum(['paquete', 'destino', 'asistencia', 'otro'], {
-    required_error: 'Seleccioná un servicio',
+    required_error: t('selectService'),
   }),
-  nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  whatsapp: z.string().min(8, 'WhatsApp inválido'),
+  nombre: z.string().min(2, t('nameTooShort')),
+  whatsapp: z.string().min(8, t('invalidWhatsapp')),
   fechas: z.string().optional(),
   cantidadPersonas: z.coerce.number().min(1).max(10),
   mensaje: z.string().optional(),
 });
 
-type FormData = z.infer<typeof formSchema>;
+type FormData = z.infer<ReturnType<typeof createFormSchema>>;
 
 interface ContactFormProps {
   paqueteTitulo?: string;
@@ -35,6 +36,7 @@ interface ContactFormProps {
 }
 
 export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormProps = {}) {
+  const t = useTranslations('public');
   const [loading, setLoading] = useState(false);
 
   const {
@@ -47,7 +49,7 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
     watch,
     formState: { errors },
   } = useForm<FormData>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(createFormSchema(t)),
     defaultValues: {
       servicio: 'paquete',
       cantidadPersonas: 1,
@@ -90,8 +92,8 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
 
   const onSubmit = async (data: FormData) => {
     if (!firebaseEnabled) {
-      toast.error('Formulario deshabilitado', {
-        description: 'Falta configurar Firebase en .env.local',
+      toast.error(t('formDisabled'), {
+        description: t('missingFirebase'),
       });
       return;
     }
@@ -105,15 +107,15 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
         leida: false,
       });
 
-      toast.success('¡Consulta enviada!', {
-        description: 'Te contactaremos a la brevedad.',
+      toast.success(t('querySent'), {
+        description: t('contactSoon'),
       });
 
       reset();
     } catch (error) {
       console.error('Error al enviar consulta:', error);
-      toast.error('Error al enviar la consulta', {
-        description: 'Por favor, intenta nuevamente.',
+      toast.error(t('queryError'), {
+        description: t('tryAgain'),
       });
     } finally {
       setLoading(false);
@@ -124,13 +126,13 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 md:space-y-5">
       <div className="space-y-4 md:space-y-5">
         <div className="space-y-2">
-          <Label className="text-xs font-semibold text-gray-900">¿Qué querés cotizar?</Label>
+          <Label className="text-xs font-semibold text-gray-900">{t('quoteServiceQuestion')}</Label>
           <div className="flex flex-wrap gap-2">
             {[
-              { value: 'paquete', label: 'Paquete' },
-              { value: 'destino', label: 'Destino' },
-              { value: 'asistencia', label: 'Asistencia' },
-              { value: 'otro', label: 'Otro' },
+              { value: 'paquete', label: t('package') },
+              { value: 'destino', label: t('destination') },
+              { value: 'asistencia', label: t('assistance') },
+              { value: 'otro', label: t('other') },
             ].map((item) => {
               const active = watch('servicio') === item.value;
               return (
@@ -155,12 +157,12 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           <div className="space-y-1">
             <Label htmlFor="nombre" className="text-xs font-medium text-gray-900">
-              Nombre
+              {t('fullName')}
             </Label>
             <Input
               id="nombre"
               {...register('nombre')}
-              placeholder="Tu nombre completo"
+              placeholder={t('fullNamePlaceholder')}
               className="h-8 w-full rounded-xl border-gray-200 bg-gray-50/70 text-xs focus:border-primary focus:ring-primary/30"
             />
             {errors.nombre && <p className="text-xs text-red-600 mt-1">{errors.nombre.message}</p>}
@@ -181,19 +183,19 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
 
           <div className="space-y-1">
             <Label htmlFor="fechas" className="text-xs font-medium text-gray-900">
-              Fechas tentativas
+              {t('tentativeDates')}
             </Label>
             <Input
               id="fechas"
               {...register('fechas')}
-              placeholder="Ej: mayo 2026 o 10/6 al 20/6"
+              placeholder={t('datesPlaceholder')}
               className="h-8 w-full rounded-xl border-gray-200 bg-gray-50/70 text-xs focus:border-primary focus:ring-primary/30"
             />
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="cantidadPersonas" className="text-xs font-medium text-gray-900">
-              Cantidad de personas
+              {t('peopleCount')}
             </Label>
             <Controller
               name="cantidadPersonas"
@@ -204,7 +206,7 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
                     id="cantidadPersonas"
                     className="h-8 w-full rounded-xl border-gray-200 bg-gray-50/70 text-xs focus:border-primary focus:ring-primary/30"
                   >
-                    <SelectValue placeholder="Cantidad" />
+                    <SelectValue placeholder={t('quantity')} />
                   </SelectTrigger>
                   <SelectContent>
                     {Array.from({ length: 10 }).map((_, index) => {
@@ -220,19 +222,19 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
               )}
             />
             {errors.cantidadPersonas && (
-              <p className="text-xs text-red-600 mt-1">Seleccioná una cantidad válida</p>
+              <p className="text-xs text-red-600 mt-1">{t('invalidQuantity')}</p>
             )}
           </div>
         </div>
 
         <div className="space-y-1">
           <Label htmlFor="mensaje" className="text-xs font-medium text-gray-900">
-            Mensaje (opcional)
+            {t('messageOptional')}
           </Label>
           <Textarea
             id="mensaje"
             {...register('mensaje')}
-            placeholder="Ej: destino, presupuesto aproximado y si ya tienen fechas definidas."
+            placeholder={t('messagePlaceholder')}
             rows={5}
             className="w-full rounded-xl border-gray-200 bg-gray-50/70 focus:border-primary focus:ring-primary/30 resize-none text-xs py-2.5"
           />
@@ -247,10 +249,10 @@ export default function ContactForm({ paqueteTitulo, paqueteId }: ContactFormPro
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Enviando...
+              {t('sending')}
             </>
           ) : (
-            'Quiero que me contacten'
+            t('wantContact')
           )}
         </Button>
       </div>

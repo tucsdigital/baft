@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 import { BadgeCheck, ImagePlus, Plus } from 'lucide-react';
@@ -21,18 +22,21 @@ type Props = {
   currencyLabel: string;
 };
 
-function formatPrice(price: number, currencyLabel: string) {
-  return `$${(Math.max(0, Number(price) || 0)).toLocaleString('es-AR')} ${currencyLabel}`;
+function formatPrice(price: number, currencyLabel: string, locale: string) {
+  return `$${(Math.max(0, Number(price) || 0)).toLocaleString(locale === 'en' ? 'en-US' : 'es-AR')} ${currencyLabel}`;
 }
 
 export default function BookingAddonsStep({ addons, selectedIds, onToggle, currencyLabel }: Props) {
+  const locale = useLocale();
+  const p = useTranslations('excursionPage');
+  const s = useTranslations('sidebar');
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
-          Hacé tu experiencia aún mejor. Se cobran por pasajero.
+          {p('addonsIntro')}
         </p>
         {selectedSet.size > 0 ? (
           <motion.div
@@ -41,7 +45,7 @@ export default function BookingAddonsStep({ addons, selectedIds, onToggle, curre
             animate={{ scale: 1, opacity: 1 }}
             className="shrink-0 rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white"
           >
-            {selectedSet.size} elegido{selectedSet.size === 1 ? '' : 's'}
+            {s('chosenCount', { count: selectedSet.size })}
           </motion.div>
         ) : null}
       </div>
@@ -84,7 +88,7 @@ export default function BookingAddonsStep({ addons, selectedIds, onToggle, curre
                   )}
                   <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/55 to-transparent" />
                   <div className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-neutral-900 shadow">
-                    + {formatPrice(addon.price, currencyLabel)}
+                    + {formatPrice(addon.price, currencyLabel, locale)}
                   </div>
                   <div
                     className={cn(
@@ -108,7 +112,7 @@ export default function BookingAddonsStep({ addons, selectedIds, onToggle, curre
                     )}
                   >
                     <Plus className={cn('h-3.5 w-3.5 transition-transform duration-300', selected && 'rotate-45')} />
-                    {selected ? 'Agregado' : 'Agregar'}
+                    {selected ? p('addonAdded') : p('addonAdd')}
                   </div>
                 </div>
               </motion.button>

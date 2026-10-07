@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { packageHasCategory } from '@/lib/packages/category-utils';
 import { humanizeExcursionType } from '@/lib/packages/package-types';
+import { useTranslations } from 'next-intl';
 
 interface PaquetesClientProps {
   paquetes: Paquete[];
@@ -46,6 +47,7 @@ export function readMulti(searchParams: URLSearchParams, key: string): string[] 
 type SortPaquetes = 'relevancia' | 'nombre' | 'precio' | 'destino';
 
 function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
+  const p = useTranslations('public');
   const [showFilters, setShowFilters] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -424,7 +426,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                 className="w-full border-gray-300 bg-white hover:bg-gray-50 text-black h-11 font-semibold"
               >
                 <SlidersHorizontal className="mr-2 h-4 w-4" />
-                {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+                {showFilters ? p('hideFilters') : p('showFilters')}
               </Button>
             </div>
 
@@ -432,22 +434,22 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
               className={`${showFilters ? 'block' : 'hidden'} lg:block sticky top-4 rounded-[24px] border border-[#E7EEF5] bg-white p-5 shadow-[0_14px_34px_rgba(17,43,73,0.08)]`}
             >
               <div className="mb-5 flex items-center justify-between border-b border-[#EDF2F7] pb-3">
-                <h2 className="text-base font-extrabold tracking-[-0.02em] text-[#112B49]">Filtros</h2>
+                <h2 className="text-base font-extrabold tracking-[-0.02em] text-[#112B49]">{p('filters')}</h2>
                 {hayFiltrosActivos && (
                   <Button onClick={limpiarFiltros} variant="ghost" size="sm" className="text-xs text-[#6C829A] hover:bg-[#F4F8FB] hover:text-[#112B49]">
-                    Limpiar
+                    {p('clear')}
                   </Button>
                 )}
               </div>
 
               <div className="space-y-5">
                 <div>
-                  <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Buscar</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('search')}</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
                       type="text"
-                      placeholder="Destino, título..."
+                      placeholder={p('searchPlaceholder')}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="h-10 border-[#E7EEF5] bg-[#FBFDFF] pl-10 text-sm focus:border-[#2BB8BF] focus:ring-1 focus:ring-[#2BB8BF]"
@@ -457,7 +459,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
 
                 {tiposUnicos.length > 0 && (
                   <div className="pt-1 border-t border-gray-100">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Tipo</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('type')}</Label>
                     <div className="space-y-2">
                       {tiposUnicos.map((tipo) => (
                         <label key={tipo} className="flex items-center gap-2.5 cursor-pointer group">
@@ -474,7 +476,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                 )}
 
                 <div className="pt-1 border-t border-gray-100">
-                  <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Transporte</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('transport')}</Label>
                   <div className="space-y-2">
                     {TRANSPORTE_OPTIONS.map((opt) => (
                       <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer group">
@@ -495,7 +497,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
 
                 {tagsUnicos.length > 0 && (
                   <div className="pt-1 border-t border-gray-100">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Etiquetas</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('tags')}</Label>
                     <div className="space-y-2">
                       {tagsUnicos.map((tag) => (
                         <label key={tag} className="flex items-center gap-2.5 cursor-pointer group">
@@ -513,7 +515,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
 
                 {destinos.length > 0 && (
                   <div className="pt-1">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Destinos ({destinos.length})</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('destinations')} ({destinos.length})</Label>
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {destinos.map((destino) => (
                         <label key={destino.id} className="flex items-center gap-2.5 cursor-pointer group">
@@ -531,7 +533,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
 
                 {incluyeOpciones.length > 0 && (
                   <div className="pt-1 border-t border-gray-100">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Incluye ({incluyeOpciones.length})</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">{p('includes')} ({incluyeOpciones.length})</Label>
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                       {incluyeOpciones.map((item) => (
                         <label key={item} className="flex items-center gap-2.5 cursor-pointer group">
@@ -556,20 +558,20 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pb-4 border-b border-gray-200">
               <p className="text-sm text-gray-600">
                 <span className="font-semibold text-black">{paquetesFiltrados.length}</span>{' '}
-                {paquetesFiltrados.length === 1 ? 'excursión' : 'excursiones'}
+                {paquetesFiltrados.length === 1 ? p('excursion') : p('excursions')}
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">Ordenar:</span>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">{p('sort')}:</span>
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortPaquetes)}>
                     <SelectTrigger className="w-[160px] h-9 bg-white border-gray-200 text-sm text-black">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="relevancia">Relevancia</SelectItem>
-                      <SelectItem value="nombre">Nombre A–Z</SelectItem>
-                      <SelectItem value="precio">Precio (menor a mayor)</SelectItem>
-                      <SelectItem value="destino">Destino</SelectItem>
+                      <SelectItem value="relevancia">{p('relevance')}</SelectItem>
+                      <SelectItem value="nombre">{p('nameAZ')}</SelectItem>
+                      <SelectItem value="precio">{p('priceLowHigh')}</SelectItem>
+                      <SelectItem value="destino">{p('destination')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -584,9 +586,9 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="12">12 por página</SelectItem>
-                    <SelectItem value="24">24 por página</SelectItem>
-                    <SelectItem value="48">48 por página</SelectItem>
+                    <SelectItem value="12">{p('perPage', { count: 12 })}</SelectItem>
+                    <SelectItem value="24">{p('perPage', { count: 24 })}</SelectItem>
+                    <SelectItem value="48">{p('perPage', { count: 48 })}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -597,13 +599,13 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-800 mb-6">
                   <X className="h-10 w-10 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-black mb-3">No hay excursiones disponibles</h3>
-                <p className="text-gray-600 mb-6 max-w-md mx-auto">Aún no hay excursiones cargadas.</p>
+                <h3 className="text-lg font-bold text-black mb-3">{p('noExcursions')}</h3>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">{p('noExcursionsLoaded')}</p>
               </div>
             ) : paquetesFiltrados.length > 0 ? (
               <>
                 <div className="text-xs text-gray-500 mb-4">
-                  Mostrando {startIndex + 1}–{Math.min(endIndex, paquetesFiltrados.length)} de {paquetesFiltrados.length}
+                  {p('showing', { from: startIndex + 1, to: Math.min(endIndex, paquetesFiltrados.length), total: paquetesFiltrados.length })}
                 </div>
 
                 <AnimatePresence mode="wait">
@@ -711,7 +713,7 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                     </div>
 
                     <p className="text-base text-gray-500">
-                      Página {currentPage} de {totalPages}
+                      {p('pageOf', { current: currentPage, total: totalPages })}
                     </p>
                   </div>
                 )}
@@ -721,10 +723,8 @@ function PaquetesClientContent({ paquetes, categorias }: PaquetesClientProps) {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-800 mb-6">
                   <X className="h-10 w-10 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-black mb-3">No se encontraron excursiones</h3>
-                <p className="text-gray-600 mb-4 max-w-md mx-auto">
-                  No hay excursiones que coincidan con los filtros seleccionados.
-                </p>
+                <h3 className="text-lg font-bold text-black mb-3">{p('noResults')}</h3>
+                <p className="text-gray-600 mb-4 max-w-md mx-auto">{p('noFilterResults')}</p>
                 {hayFiltrosActivos && (
                   <p className="text-sm text-gray-500 mb-6">
                     Filtros activos:

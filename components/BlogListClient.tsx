@@ -7,6 +7,7 @@ import Hero from '@/components/Hero';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import { BlogPost } from '@/types';
 import BlogCard from '@/components/BlogCard';
+import { useTranslations } from 'next-intl';
 
 const fadeInUpVariants = {
   hidden: { opacity: 0, y: 60 },
@@ -37,6 +38,7 @@ interface BlogListClientProps {
 }
 
 export default function BlogListClient({ posts, banners }: BlogListClientProps) {
+  const p = useTranslations('public');
   const [bannerIndex, setBannerIndex] = useState(0);
 
   useEffect(() => {
@@ -67,13 +69,13 @@ export default function BlogListClient({ posts, banners }: BlogListClientProps) 
         <div className="container mx-auto px-4 md:px-6 lg:px-8">
           <div className="mb-10 md:mb-14 max-w-3xl">
             <div className="inline-block mb-4">
-              <span className="badge-pluma pluma-underline">Actualidad</span>
+              <span className="badge-pluma pluma-underline">{p('actuality')}</span>
             </div>
             <h2 className="text-lg md:text-lg lg:text-lg font-bold leading-tight">
-              Inspiración y noticias de viaje
+              {p('inspiration')}
             </h2>
             <p className="text-sm md:text-sm text-[#4B5563]">
-              Historias, recomendaciones y novedades para planificar mejor tu próximo viaje.
+              {p('travelStories')}
             </p>
           </div>
 

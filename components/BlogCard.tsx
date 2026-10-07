@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { useLocale, useTranslations } from 'next-intl';
 import { Eye } from 'lucide-react';
 import { BlogPost } from '@/types';
 
@@ -12,6 +13,8 @@ interface BlogCardProps {
 }
 
 export default function BlogCard({ post, index = 0 }: BlogCardProps) {
+  const locale = useLocale();
+  const t = useTranslations('public');
   const direction = index % 2 === 0 ? -1 : 1;
   const vertical = index % 3 === 0 ? -1 : 1;
   const duration = 0.6 + (index % 3) * 0.05;
@@ -25,12 +28,12 @@ export default function BlogCard({ post, index = 0 }: BlogCardProps) {
     date = new Date(rawDate as string);
   }
   const dateLabel = date
-    ? new Intl.DateTimeFormat('es-AR', {
+    ? new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'es-AR', {
         day: '2-digit',
         month: 'long',
         year: 'numeric',
       }).format(date as Date)
-    : 'Reciente';
+    : t('recent');
 
   const cardImage = post.imagenTarjeta || post.imagenPrincipal || '/logo_white.png';
 
@@ -50,7 +53,7 @@ export default function BlogCard({ post, index = 0 }: BlogCardProps) {
       viewport={{ once: true, margin: '-120px' }}
       className="group relative overflow-hidden rounded-2xl md:rounded-3xl bg-[#0B0B0C] shadow-[0_12px_32px_rgba(0,0,0,0.18)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_24px_60px_rgba(0,0,0,0.25)]"
     >
-      <Link href={`/blog/${post.slug}`} className="block h-full">
+      <Link href={`/${locale}/blog/${post.slug}`} className="block h-full">
         <div className="relative aspect-[1/1] md:aspect-[4/5] overflow-hidden">
           <Image
             src={cardImage}

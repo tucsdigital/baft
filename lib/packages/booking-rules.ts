@@ -68,17 +68,20 @@ export function formatLeadHoursEs(hours: number): string {
 }
 
 /** "vie 20 sep 2026" a partir de YYYY-MM-DD. */
-export function formatIsoDateEs(iso: string): string {
+export function formatIsoDateEs(iso: string, locale: string = 'es'): string {
   const parsed = new Date(`${String(iso ?? '').trim()}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return String(iso ?? '');
   return parsed
-    .toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    .toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
     .replace(/\./g, '');
 }
 
 /** Mensaje estándar para avisos y errores de anticipación. */
-export function buildLeadTimeMessage(leadHours: number): string {
+export function buildLeadTimeMessage(leadHours: number, locale: string = 'es'): string {
   if (getMinLeadHours({ minLeadHours: leadHours }) <= 0) return '';
-  const firstDate = formatIsoDateEs(getFirstBookableDateIso(leadHours));
+  const firstDate = formatIsoDateEs(getFirstBookableDateIso(leadHours), locale);
+  if (locale === 'en') {
+    return `Bookings require at least ${Math.max(0, Math.floor(Number(leadHours) || 0))} hours' notice. Next available date: ${firstDate}.`;
+  }
   return `Las reservas se realizan con un mínimo de ${formatLeadHoursEs(leadHours)} de anticipación. Próxima fecha disponible: ${firstDate}.`;
 }

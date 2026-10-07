@@ -12,7 +12,7 @@ import ServicesSection from "@/components/sections/ServicesSection";
 import ValuesSection from "@/components/sections/ValuesSection";
 import AboutSection from "@/components/sections/AboutSection";
 import ContactSectionBlock from "@/components/sections/ContactSectionBlock";
-import { renderTemplate, siteConfig } from "@/lib/siteConfig";
+import { useTranslations } from 'next-intl';
 
 interface HomeClientProps {
   paquetes: Paquete[];
@@ -114,6 +114,7 @@ export default function HomeClient({
   categoriasDestacadas,
   banners,
 }: HomeClientProps) {
+  const p = useTranslations('public');
   const [packagesLoading, setPackagesLoading] = useState(true);
 
   useEffect(() => {
@@ -138,9 +139,9 @@ export default function HomeClient({
       <ProductsSection
         items={productosOrdenados}
         filterType="paquete"
-        sectionBadge={siteConfig.content.packagesSection.badge}
-        sectionTitle={siteConfig.content.packagesSection.title}
-        sectionSubtitle={renderTemplate(siteConfig.content.packagesSection.subtitleTemplate)}
+        sectionBadge={p('packagesBadge')}
+        sectionTitle={p('packagesTitle')}
+        sectionSubtitle={p('packagesSubtitle')}
         loading={packagesLoading}
         fadeInLeftVariants={fadeInLeftVariants}
         fadeInRightVariants={fadeInRightVariants}

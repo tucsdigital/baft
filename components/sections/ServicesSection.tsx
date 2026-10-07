@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { motion, Variants } from 'framer-motion';
 import { Users, Plane, Headphones, Globe } from 'lucide-react';
 import { siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 interface ServicesSectionProps {
   fadeInUpVariants: Variants;
@@ -20,8 +21,17 @@ export default function ServicesSection({
   staggerContainerVariants,
   scaleInVariants,
 }: ServicesSectionProps) {
-  const section = siteConfig.content.services;
-  const services = section.items ?? [];
+  const t = useTranslations('home.services');
+  const section = {
+    badge: t('badge'), titlePrefix: t('titlePrefix'),
+    titleAccent: t('titleAccent'), subtitle: t('subtitle'),
+  };
+  const services = siteConfig.content.services.items.map((item, index) => ({
+    ...item,
+    title: t(`items.${index}.title`),
+    desc: t(`items.${index}.desc`),
+    cta: item.cta ? { ...item.cta, label: t(`items.${index}.cta`) } : undefined,
+  }));
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
+import { useTranslations } from 'next-intl';
 
 export default function PaqueteGalleryGrid({
   images,
@@ -12,6 +13,7 @@ export default function PaqueteGalleryGrid({
   images: string[];
   title: string;
 }) {
+  const p = useTranslations('excursionPage');
   const slides = useMemo(
     () =>
       (Array.isArray(images) ? images.filter(Boolean) : []).map((src, index) => ({
@@ -37,7 +39,7 @@ export default function PaqueteGalleryGrid({
               setOpen(true);
             }}
             className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#D2E5F6] bg-[#EAF3FC] text-left"
-            aria-label={`Ampliar imagen ${slideIndex + 1} de ${slides.length}`}
+            aria-label={p('galleryZoom', { index: slideIndex + 1, total: slides.length })}
           >
             <Image
               src={slide.src}

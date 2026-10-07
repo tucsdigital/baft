@@ -2,15 +2,17 @@
 
 import { Headphones, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 
 const items = [
-  { icon: Users, title: "Viajes grupales acompañados", subtitle: "Coordinadores durante el viaje" },
-  { icon: ShieldCheck, title: "Pagos 100% seguros", subtitle: "Tus datos protegidos" },
-  { icon: Headphones, title: "Atención personalizada", subtitle: "Antes, durante y después" },
-  { icon: Sparkles, title: "Momentos únicos", subtitle: "Destinos increíbles" },
+  { icon: Users, key: "0" },
+  { icon: ShieldCheck, key: "1" },
+  { icon: Headphones, key: "2" },
+  { icon: Sparkles, key: "3" },
 ] as const;
 
 export default function HomeFeaturesRow() {
+  const t = useTranslations("features");
   return (
     <section className="bg-[#F5FAFF]">
       <div className="container mx-auto px-4 md:px-6 lg:px-8">
@@ -19,7 +21,7 @@ export default function HomeFeaturesRow() {
             const Icon = it.icon;
             return (
               <motion.div
-                key={it.title}
+                key={it.key}
                 className="flex items-start gap-3"
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -34,8 +36,8 @@ export default function HomeFeaturesRow() {
                   <Icon className="h-5 w-5 text-[#2BB8BF]" />
                 </motion.div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 leading-snug">{it.title}</div>
-                  <div className="text-xs text-gray-500 leading-snug">{it.subtitle}</div>
+                  <div className="text-sm font-semibold text-gray-900 leading-snug">{t(`${it.key}.title`)}</div>
+                  <div className="text-xs text-gray-500 leading-snug">{t(`${it.key}.subtitle`)}</div>
                 </div>
               </motion.div>
             );

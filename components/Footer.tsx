@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { Instagram, MapPin, Phone, Mail, Clock, Radio } from 'lucide-react';
 import { CONTACT_INFO, SOCIAL_MEDIA, SITE_NAME, LEGAL_INFO } from '@/lib/constants';
 import { getBrandLogoSrc, isRemoteUrl, renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 const ThreadsIcon = ({ className }: { className?: string }) => (
   <svg
@@ -31,6 +32,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 export default function Footer() {
+  const p = useTranslations('public');
   const logoSrc = '/images/logo_white.png';
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || '{{siteName}} Logo');
   const developer = siteConfig.company.developerCredits;
@@ -94,7 +96,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link href="/terminos-condiciones" className="text-gray-400 hover:text-white transition-colors">
-                  Términos y Condiciones
+                  {p('terms')}
                 </Link>
               </li>
             </ul>
@@ -125,14 +127,14 @@ export default function Footer() {
 
           {/* Redes sociales */}
           <div>
-            <h3 className="font-semibold text-sm mb-2">Seguinos</h3>
+            <h3 className="font-semibold text-sm mb-2">{p('followUs')}</h3>
             <div className="flex space-x-2.5">
               {SOCIAL_MEDIA.instagram && (
                 <a
                   href={SOCIAL_MEDIA.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Seguinos en Instagram"
+                  aria-label={`${p('followUs')} Instagram`}
                   className="border border-secondary text-secondary p-2 rounded-full hover:bg-secondary/10 transition-colors"
                 >
                   <Instagram className="h-4 w-4" aria-hidden="true" />
@@ -143,7 +145,7 @@ export default function Footer() {
                   href={SOCIAL_MEDIA.threads}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Seguinos en Threads"
+                  aria-label={`${p('followUs')} Threads`}
                   className="border border-secondary text-secondary p-2 rounded-full hover:bg-secondary/10 transition-colors"
                 >
                   <ThreadsIcon className="h-4 w-4" />
@@ -154,7 +156,7 @@ export default function Footer() {
                   href={SOCIAL_MEDIA.whatsapp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Contactanos por WhatsApp"
+                  aria-label={p('contactWhatsApp')}
                   className="border border-secondary text-secondary p-2 rounded-full hover:bg-secondary/10 transition-colors"
                 >
                   <WhatsAppIcon className="h-4 w-4" />
@@ -165,7 +167,7 @@ export default function Footer() {
                   href={SOCIAL_MEDIA.whatsappChannel}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Canal de WhatsApp"
+                  aria-label={p('contactChannel')}
                   className="border border-secondary text-secondary p-2 rounded-full hover:bg-secondary/10 transition-colors"
                 >
                   <Radio className="h-4 w-4" aria-hidden="true" />
@@ -174,7 +176,7 @@ export default function Footer() {
               {SOCIAL_MEDIA.email && (
                 <a
                   href={SOCIAL_MEDIA.email}
-                  aria-label="Enviar email"
+                  aria-label={p('sendEmail')}
                   className="border border-secondary text-secondary p-2 rounded-full hover:bg-secondary/10 transition-colors"
                 >
                   <Mail className="h-4 w-4" aria-hidden="true" />
@@ -187,14 +189,14 @@ export default function Footer() {
         <div className="border-t border-gray-800 mt-4 pt-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-2">
             <p className="text-gray-400 text-sm text-center md:text-left">
-              &copy; {new Date().getFullYear()} {SITE_NAME}. Todos los derechos reservados.
+              &copy; {new Date().getFullYear()} {SITE_NAME}. {p('allRightsReserved')}
             </p>
             <div className="flex flex-wrap justify-center items-center gap-3 text-sm">
               <Link 
                 href="/terminos-condiciones" 
                 className="text-gray-400 hover:text-white transition-colors"
               >
-                Términos y Condiciones
+                {p('terms')}
               </Link>
               <span className="text-gray-500">|</span>
               <span className="text-gray-400">
@@ -205,7 +207,7 @@ export default function Footer() {
           <div className="border-t border-gray-800 mt-2 pt-2">
             <div className="flex flex-col md:flex-row justify-center items-center gap-1.5">
               <p className="text-gray-400 text-sm text-center">
-                Desarrollado por{' '}
+                {p('developedBy')} {' '}
                 <a
                   href={developer.url}
                   target="_blank"

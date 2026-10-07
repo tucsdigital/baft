@@ -12,6 +12,9 @@ import { SITE_NAME, SITE_URL, SOCIAL_MEDIA } from '@/lib/constants';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import ShareBar from '@/components/ShareBar';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { localizeBlogPost } from '@/lib/i18n/cms-content';
+import type { AppLocale } from '@/i18n/routing';
 
 /** Sin caché: los cambios del admin (blog) se ven de inmediato */
 export const revalidate = 0;
@@ -38,8 +41,9 @@ async function getPost(slug: string): Promise<BlogPost | null> {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
   if (!firebaseEnabled) {
-    const url = `${SITE_URL}/blog/${slug}`;
+    const url = `${SITE_URL}/${locale}/blog/${slug}`;
     return {
       title: `${slug} - ${SITE_NAME}`,
       description: `Nota ${slug} en ${SITE_NAME}.`,
@@ -52,36 +56,39 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return { title: 'Entrada no encontrada' };
   }
 
-  const url = `${SITE_URL}/blog/${slug}`;
-  const description = post.extracto || post.contenido.replace(/<[^>]*>/g, '').substring(0, 160);
+  const localizedPost = await localizeBlogPost(post, locale);
+  const url = `${SITE_URL}/${locale}/blog/${slug}`;
+  const spanishUrl = `${SITE_URL}/es/blog/${slug}`;
+  const englishUrl = `${SITE_URL}/en/blog/${slug}`;
+  const description = localizedPost.extracto || localizedPost.contenido.replace(/<[^>]*>/g, '').substring(0, 160);
 
-  const coverImage = post.imagenPortada || post.imagenTarjeta || post.imagenPrincipal;
+  const coverImage = localizedPost.imagenPortada || localizedPost.imagenTarjeta || localizedPost.imagenPrincipal;
 
   return {
-    title: `${post.titulo} - ${SITE_NAME}`,
+    title: `${localizedPost.titulo} - ${SITE_NAME}`,
     description,
-    alternates: { canonical: url },
+    alternates: { canonical: url, languages: { es: spanishUrl, en: englishUrl, 'x-default': spanishUrl } },
     openGraph: {
       type: 'article',
       url,
-      title: `${post.titulo} - ${SITE_NAME}`,
+      title: `${localizedPost.titulo} - ${SITE_NAME}`,
       description,
       siteName: SITE_NAME,
-      locale: 'es_AR',
+      locale: locale === 'en' ? 'en_US' : 'es_AR',
       images: coverImage
         ? [
             {
               url: coverImage,
               width: 1200,
               height: 630,
-              alt: post.titulo,
+              alt: localizedPost.titulo,
             },
           ]
         : [],
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${post.titulo} - ${SITE_NAME}`,
+      title: `${localizedPost.titulo} - ${SITE_NAME}`,
       description,
       images: coverImage ? [coverImage] : [],
     },
@@ -90,6 +97,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const locale = (await getLocale()) as AppLocale;
+  const p = await getTranslations('public');
   if (!firebaseEnabled) {
     return (
       <>
@@ -109,15 +118,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       </>
     );
   }
-  const post = await getPost(slug);
+  const postBase = await getPost(slug);
 
-  if (!post) {
+  if (!postBase) {
     notFound();
   }
 
+  const post = await localizeBlogPost(postBase, locale);
+
   const coverImage = post.imagenPortada || post.imagenTarjeta || post.imagenPrincipal;
 
-  const shareUrl = `${SITE_URL}/blog/${slug}`;
+  const shareUrl = `${SITE_URL}/${locale}/blog/${slug}`;
   const shareDescription = post.extracto || post.contenido.replace(/<[^>]*>/g, '').substring(0, 160);
 
   return (
@@ -141,8 +152,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                                 ? (post.fechaPublicacion as unknown as { seconds: number }).seconds * 1000
                                 : post.fechaPublicacion instanceof Date
                                 ? post.fechaPublicacion
-                                : Date.now()
-                            ).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+                                : new Date(0)
+                            ).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
                           : ''}
                       </p>
                       <h1 className="text-2xl md:text-3xl font-bold text-white mt-2">{post.titulo}</h1>
@@ -160,8 +171,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                           ? (post.fechaPublicacion as unknown as { seconds: number }).seconds * 1000
                           : post.fechaPublicacion instanceof Date
                           ? post.fechaPublicacion
-                          : Date.now()
-                      ).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+                          : new Date(0)
+                      ).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
                     : ''}
                 </p>
                 <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">{post.titulo}</h1>
@@ -181,23 +192,21 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 <ShareBar title={post.titulo} url={shareUrl} excerpt={shareDescription} />
 
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-sm space-y-3">
-                  <p className="text-sm font-semibold text-gray-900">¿Querés un viaje similar?</p>
-                  <p className="text-sm text-gray-600">
-                    Contanos tu idea y armamos un plan a medida.
-                  </p>
+                  <p className="text-sm font-semibold text-gray-900">{p('similarTrip')}</p>
+                  <p className="text-sm text-gray-600">{p('tellUsIdea')}</p>
                   <a
                     href="https://wa.me/5493513154330"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center w-full rounded-xl bg-primary text-white text-sm font-semibold py-2.5 hover:bg-primary/90"
                   >
-                    Hablar con un asesor
+                    {p('talkToAdvisor')}
                     <ArrowUpRight className="ml-2 h-4 w-4" />
                   </a>
                 </div>
 
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-                  <p className="text-sm font-semibold text-gray-900">Explorar más</p>
+                  <p className="text-sm font-semibold text-gray-900">{p('exploreMore')}</p>
                   <Link
                     href="/excursiones"
                     className="inline-flex items-center justify-center w-full rounded-xl border border-gray-200 text-sm font-semibold py-2.5 hover:bg-gray-50"

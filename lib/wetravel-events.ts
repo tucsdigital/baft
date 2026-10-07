@@ -57,6 +57,17 @@ function firstAmount(root: any): number | null {
 }
 
 function normalizeStatus(root: any, eventType: string): string {
+  if (eventType === 'booking.created' || eventType === 'booking.updated') {
+    const booking = root?.data;
+    if (booking?.buyer?.cancelled === true) return 'unknown';
+    // A booking event without a payment status only proves full payment when all totals are explicit.
+    if (booking && !firstString(root, ['payment_status', 'transaction_status', 'booking_status', 'status', 'state'])) {
+      const { total_paid_amount: paid, total_price_amount: price, total_due_amount: due } = booking;
+      if ([paid, price, due].every(value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+        && price > 0 && paid === price && due === 0) return 'paid';
+      return 'pending';
+    }
+  }
   const candidates = [
     firstString(root, ['payment_status', 'transaction_status', 'booking_status', 'status', 'state']),
     eventType,
@@ -77,11 +88,11 @@ export function normalizeWeTravelEvent(payload: any): WeTravelNormalizedEvent {
     eventType,
     status: normalizeStatus(payload, eventType),
     externalId: firstString(payload, ['external_id', 'external_reference', 'trip_id']),
-    paymentLinkId: firstString(payload, ['payment_link_id', 'payment_link_uuid', 'link_id']),
+    paymentLinkId: firstString(payload, ['payment_link_id', 'payment_link_uuid', 'link_id', 'trip_uuid']),
     paymentId: firstString(payload, ['payment_id', 'transaction_id', 'payment_uuid']),
     bookingId: firstString(payload, ['booking_id', 'booking_uuid', 'order_id']),
-    amountMinor: firstAmount(payload),
-    currency: firstString(payload, ['currency', 'currency_code']).toLowerCase(),
+    amountMinor: /^booking\./.test(eventType) ? (Number.isSafeInteger(payload?.data?.total_paid_amount) ? payload.data.total_paid_amount : null) : firstAmount(payload),
+    currency: firstString(payload, ['currency', 'currency_code', 'trip_currency']).toLowerCase(),
     customerEmail: firstString(payload, ['email', 'customer_email', 'participant_email']),
     customerName: firstString(payload, ['customer_name', 'participant_name', 'full_name', 'name']),
     raw: payload,

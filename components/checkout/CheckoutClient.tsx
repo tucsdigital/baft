@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Baby, Calendar, ChevronRight, CreditCard, Loader2, Lock, Mail, ReceiptText, ShieldCheck, TicketPlus, User, Users } from 'lucide-react';
 import type { Experience } from '@/components/landing-reserva/types';
@@ -16,6 +17,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { applyPhonePrefix, getCountryDialCode } from '@/lib/countries';
 import { buildLeadTimeMessage, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
 import type { PeopleBreakdown } from '@/lib/packages/people-categories';
+import { useTranslations } from 'next-intl';
+import WeTravelVerification from './WeTravelVerification';
+import { parseWeTravelTrackingSession, type WeTravelTrackingSession } from '@/lib/wetravel-tracking';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -117,6 +121,7 @@ function formatMoney(amount: number, currency: string) {
 }
 
 export default function CheckoutClient({ experience, date, people, pax, pricing, initialError, selectedAddons }: CheckoutClientProps) {
+  const t = useTranslations('checkout');
   const travelerCount = Math.max(1, people);
   const storageKey = getCheckoutStorageKey(experience.slug, date, travelerCount);
   const [step, setStep] = useState<CheckoutStep>('form');
@@ -126,6 +131,17 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
   const [passengers, setPassengers] = useState<TravelerFormState[]>([]);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  const [weTravelSession, setWeTravelSession] = useState<WeTravelTrackingSession | null>(null);
+  const [trackingRestored, setTrackingRestored] = useState(false);
+  const trackingStorageKey = `wetravel_tracking_v1_${JSON.stringify([experience.slug, date, travelerCount, pax ?? {}, (selectedAddons ?? []).map(addon => addon.id).sort()])}`;
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(trackingStorageKey);
+      setWeTravelSession(raw ? parseWeTravelTrackingSession(JSON.parse(raw)) : null);
+    } catch { /* Storage may be unavailable in private browsing. */ }
+    setTrackingRestored(true);
+  }, [trackingStorageKey]);
   const [touched, setTouched] = useState({
     firstName: false,
     lastName: false,
@@ -188,10 +204,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
   const steps = useMemo(
     () => [
-      { id: 'form' as const, title: 'Tus datos', icon: User },
-      { id: 'payment' as const, title: 'Pago', icon: CreditCard },
+      { id: 'form' as const, title: t('yourData'), icon: User },
+      { id: 'payment' as const, title: t('payment'), icon: CreditCard },
     ],
-    []
+    [t]
   );
 
   useEffect(() => {
@@ -242,7 +258,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     try {
       const url = new URL(window.location.href);
       const code = url.searchParams.get('ref') || url.searchParams.get('referral') || url.searchParams.get('code');
-      setReferralCode(code && code.trim() ? code.trim() : null);
+      const stored = code && code.trim() ? '' : sessionStorage.getItem('referral_code') || '';
+      const resolved = (code && code.trim()) || stored.trim();
+      if (code && code.trim()) sessionStorage.setItem('referral_code', code.trim());
+      setReferralCode(resolved || null);
     } catch {
       setReferralCode(null);
     }
@@ -321,24 +340,24 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     });
 
     if (form.customerFirstName.trim().length < NAME_MIN_LENGTH) {
-      setError('Ingresá tu nombre.');
+      setError(t('firstName'));
       return;
     }
     if (form.customerLastName.trim().length < NAME_MIN_LENGTH) {
-      setError('Ingresá tu apellido.');
+      setError(t('lastName'));
       return;
     }
     if (!EMAIL_REGEX.test(form.customerEmail.trim())) {
-      setError('Ingresá un email válido.');
+      setError(t('invalidEmail'));
       return;
     }
     if (!form.customerCountry.trim() || !countryPaymentMethod) {
-      setError('Seleccioná tu país.');
+      setError(t('selectCountryError'));
       setTouched((prev) => ({ ...prev, country: true }));
       return;
     }
     if (form.customerPhone.trim().length < PHONE_MIN_DIGITS || countPhoneDigits(form.customerPhone) < PHONE_MIN_DIGITS) {
-      setError('Ingresá un WhatsApp válido.');
+      setError(t('invalidPhone'));
       return;
     }
     if (dateTooSoon) {
@@ -349,11 +368,11 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
       return;
     }
     if (!form.customerDocument.trim()) {
-      setError('Ingresá tu DNI o pasaporte.');
+      setError(t('requiredField'));
       return;
     }
     if (!DATE_REGEX.test(form.customerBirthDate.trim())) {
-      setError('Ingresá tu fecha de nacimiento.');
+      setError(t('invalidDate'));
       return;
     }
     if (!passengersValid) {
@@ -366,10 +385,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     setPaymentMethod(countryPaymentMethod);
     setStep('payment');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    void createPaymentPreference(countryPaymentMethod);
   };
 
   const createPaymentPreference = async (method: PaymentMethod = paymentMethod ?? countryPaymentMethod ?? 'mercadopago') => {
+    if (isLoading || weTravelSession || !trackingRestored) return;
     if (blockedError) {
       setError(blockedError);
       return;
@@ -424,21 +443,41 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error || 'No se pudo iniciar el pago.');
+        throw new Error(payload?.error || t('paymentStartError'));
       }
 
-      const data = (await response.json()) as { url?: string };
+      const data = (await response.json()) as { url?: string; intentId?: string; provider?: string };
       if (!data.url) {
-        throw new Error('No se recibió la URL de pago.');
+        throw new Error(t('paymentUrlError'));
       }
 
-      window.location.href = data.url;
+      if (method === 'wetravel') {
+        const session = parseWeTravelTrackingSession(data);
+        if (!session || data.provider !== 'wetravel') throw new Error(t('paymentUrlError'));
+        setWeTravelSession(session);
+        try { sessionStorage.setItem(trackingStorageKey, JSON.stringify(session)); } catch { /* Keep tracking in memory. */ }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        window.location.href = data.url;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo iniciar el pago.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!trackingRestored) return <div className="flex min-h-64 items-center justify-center" role="status"><Loader2 className="mr-2 h-5 w-5 animate-spin" />{t('checkingPayment')}</div>;
+
+  if (weTravelSession) return (
+    <div className="min-h-screen bg-[#F5FAFF] px-4 py-10 md:px-6">
+      <WeTravelVerification key={weTravelSession.intentId} intentId={weTravelSession.intentId} paymentUrl={weTravelSession.url} redirectOnConfirmed onBack={() => {
+        try { sessionStorage.removeItem(trackingStorageKey); } catch { /* Storage is optional. */ }
+        setWeTravelSession(null);
+        setStep('form');
+      }} />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F5FAFF] px-4 py-10 md:px-6 lg:px-8">
@@ -486,8 +525,8 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                 >
                   <Card className="rounded-3xl border-[#D4E6F7] shadow-[0_16px_36px_rgba(15,66,116,0.08)]">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">Completá tus datos</CardTitle>
-                      <p className="text-sm text-[#5A7898]">Reservás directo y seguís al pago, sin pasar por carrito.</p>
+                      <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">{t('completeYourData')}</CardTitle>
+                      <p className="text-sm text-[#5A7898]">{t('reserveDirectly')}</p>
                     </CardHeader>
                     <CardContent>
                       <form onSubmit={handleSubmitForm} className="space-y-5" noValidate>
@@ -510,7 +549,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                         </div>
                         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerFirstName">Nombre *</Label>
+                            <Label htmlFor="customerFirstName">{t('firstName')} *</Label>
                             <Input
                               id="customerFirstName"
                               value={form.customerFirstName}
@@ -518,10 +557,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               onBlur={() => setTouched((prev) => ({ ...prev, firstName: true }))}
                               placeholder="Ej: Juan"
                             />
-                            {firstNameError ? <p className="text-xs font-semibold text-red-500">Minimo 2 caracteres.</p> : null}
+                            {firstNameError ? <p className="text-xs font-semibold text-red-500">{t('minimumTwoCharacters')}</p> : null}
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerLastName">Apellido *</Label>
+                            <Label htmlFor="customerLastName">{t('lastName')} *</Label>
                             <Input
                               id="customerLastName"
                               value={form.customerLastName}
@@ -529,10 +568,10 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               onBlur={() => setTouched((prev) => ({ ...prev, lastName: true }))}
                               placeholder="Ej: Garcia"
                             />
-                            {lastNameError ? <p className="text-xs font-semibold text-red-500">Minimo 2 caracteres.</p> : null}
+                            {lastNameError ? <p className="text-xs font-semibold text-red-500">{t('minimumTwoCharacters')}</p> : null}
                           </div>
                           <div className="col-span-2 space-y-1.5 md:col-span-1">
-                            <Label htmlFor="customerEmail">Email *</Label>
+                            <Label htmlFor="customerEmail">{t('email')} *</Label>
                             <div className="relative">
                               <Input
                                 id="customerEmail"
@@ -545,27 +584,22 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               />
                               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7C95AE]" />
                             </div>
-                            {emailError ? <p className="text-xs font-semibold text-red-500">Ingresa un email valido.</p> : null}
+                            {emailError ? <p className="text-xs font-semibold text-red-500">{t('invalidEmailInline')}</p> : null}
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerNationality">País *</Label>
+                            <Label htmlFor="customerNationality">{t('country')} *</Label>
                             <NationalitySelect
                               id="customerNationality"
                               value={form.customerCountry}
                               onChange={handleNationalityChange}
-                              placeholder="Seleccioná tu nacionalidad"
+                              placeholder={t('selectCountry')}
                             />
-                            {countryPaymentMethod ? (
-                              <p className="text-xs font-semibold text-[#537190]">
-                                Medio de pago: {countryPaymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}
-                              </p>
-                            ) : null}
-                            {countryError ? <p className="text-xs font-semibold text-red-500">Seleccioná un país.</p> : null}
+                            {countryError ? <p className="text-xs font-semibold text-red-500">{t('selectCountryError')}</p> : null}
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerPhone">WhatsApp *</Label>
+                            <Label htmlFor="customerPhone">{t('whatsapp')} *</Label>
                             <PhoneWithPrefixInput
                               id="customerPhone"
                               value={form.customerPhone}
@@ -576,28 +610,28 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerDocument">DNI / Pasaporte *</Label>
+                            <Label htmlFor="customerDocument">{t('document')} *</Label>
                             <Input
                               id="customerDocument"
                               value={form.customerDocument}
                               onChange={(event) => setForm((prev) => ({ ...prev, customerDocument: event.target.value }))}
                               onBlur={() => setTouched((prev) => ({ ...prev, document: true }))}
-                              placeholder="Numero de documento"
+                              placeholder={t('documentPlaceholder')}
                             />
-                            {documentError ? <p className="text-xs font-semibold text-red-500">Este dato es obligatorio.</p> : null}
+                            {documentError ? <p className="text-xs font-semibold text-red-500">{t('requiredField')}</p> : null}
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerBirthDate">Fecha de nacimiento *</Label>
+                            <Label htmlFor="customerBirthDate">{t('birthDate')} *</Label>
                             <ArgentineDateInput
                               id="customerBirthDate"
                               value={form.customerBirthDate}
                               onChange={(value) => setForm((prev) => ({ ...prev, customerBirthDate: value }))}
                               onBlur={() => setTouched((prev) => ({ ...prev, birthDate: true }))}
                             />
-                            {birthDateError ? <p className="text-xs font-semibold text-red-500">Ingresa una fecha valida.</p> : null}
+                            {birthDateError ? <p className="text-xs font-semibold text-red-500">{t('invalidDate')}</p> : null}
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerAge">Edad</Label>
+                            <Label htmlFor="customerAge">{t('age')}</Label>
                             <Input
                               id="customerAge"
                               type="number"
@@ -610,12 +644,12 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="customerHotel">Hotel</Label>
+                            <Label htmlFor="customerHotel">{t('hotel')}</Label>
                             <Input
                               id="customerHotel"
                               value={form.customerHotel}
                               onChange={(event) => setForm((prev) => ({ ...prev, customerHotel: event.target.value }))}
-                              placeholder="Nombre del hotel"
+                              placeholder={t('hotelPlaceholder')}
                             />
                           </div>
                         </div>
@@ -628,31 +662,31 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                               return (
                                 <div key={index} className="space-y-3 rounded-2xl border border-[#E3EDF7] bg-[#F8FBFF] p-4">
                                   <div className="text-sm font-extrabold uppercase tracking-[0.1em] text-[#0B2240]">
-                                    Pasajero {index + 2}
+                                    {t('passenger', { number: index + 2 })}
                                   </div>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-firstName`}>Nombre *</Label>
+                                      <Label htmlFor={`passenger-${index}-firstName`}>{t('name')} *</Label>
                                       <Input
                                         id={`passenger-${index}-firstName`}
                                         value={traveler.firstName}
                                         onChange={(event) => updatePassenger(index, { firstName: event.target.value })}
                                         placeholder="Ej: Juan"
                                       />
-                                      {showErrors && errors?.firstName ? <p className="text-xs font-semibold text-red-500">Minimo 2 caracteres.</p> : null}
+                                      {showErrors && errors?.firstName ? <p className="text-xs font-semibold text-red-500">{t('minimumCharacters')}</p> : null}
                                     </div>
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-lastName`}>Apellido *</Label>
+                                      <Label htmlFor={`passenger-${index}-lastName`}>{t('lastName')} *</Label>
                                       <Input
                                         id={`passenger-${index}-lastName`}
                                         value={traveler.lastName}
                                         onChange={(event) => updatePassenger(index, { lastName: event.target.value })}
                                         placeholder="Ej: Garcia"
                                       />
-                                      {showErrors && errors?.lastName ? <p className="text-xs font-semibold text-red-500">Minimo 2 caracteres.</p> : null}
+                                      {showErrors && errors?.lastName ? <p className="text-xs font-semibold text-red-500">{t('minimumCharacters')}</p> : null}
                                     </div>
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-age`}>Edad *</Label>
+                                      <Label htmlFor={`passenger-${index}-age`}>{t('age')} *</Label>
                                       <Input
                                         id={`passenger-${index}-age`}
                                         type="number"
@@ -662,36 +696,36 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                                         onChange={(event) => updatePassenger(index, { age: event.target.value })}
                                         placeholder="Ej: 30"
                                       />
-                                      {showErrors && errors?.age ? <p className="text-xs font-semibold text-red-500">Ingresa una edad valida.</p> : null}
+                                      {showErrors && errors?.age ? <p className="text-xs font-semibold text-red-500">{t('invalidAge')}</p> : null}
                                     </div>
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-birthDate`}>Fecha de nacimiento *</Label>
+                                      <Label htmlFor={`passenger-${index}-birthDate`}>{t('birthDate')} *</Label>
                                       <ArgentineDateInput
                                         id={`passenger-${index}-birthDate`}
                                         value={traveler.birthDate}
                                         onChange={(value) => updatePassenger(index, { birthDate: value })}
                                       />
-                                      {showErrors && errors?.birthDate ? <p className="text-xs font-semibold text-red-500">Ingresa una fecha valida.</p> : null}
+                                      {showErrors && errors?.birthDate ? <p className="text-xs font-semibold text-red-500">{t('invalidDate')}</p> : null}
                                     </div>
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-phone`}>Telefono *</Label>
+                                      <Label htmlFor={`passenger-${index}-phone`}>{t('whatsapp')} *</Label>
                                       <Input
                                         id={`passenger-${index}-phone`}
                                         value={traveler.phone}
                                         onChange={(event) => updatePassenger(index, { phone: event.target.value })}
                                         placeholder="+54 11 ..."
                                       />
-                                      {showErrors && errors?.phone ? <p className="text-xs font-semibold text-red-500">Ingresa un telefono valido.</p> : null}
+                                      {showErrors && errors?.phone ? <p className="text-xs font-semibold text-red-500">{t('invalidPhoneInline')}</p> : null}
                                     </div>
                                     <div className="space-y-1.5">
-                                      <Label htmlFor={`passenger-${index}-document`}>DNI / Pasaporte *</Label>
+                                      <Label htmlFor={`passenger-${index}-document`}>{t('document')} *</Label>
                                       <Input
                                         id={`passenger-${index}-document`}
                                         value={traveler.document}
                                         onChange={(event) => updatePassenger(index, { document: event.target.value })}
-                                        placeholder="Numero de documento"
+                                        placeholder={t('documentPlaceholder')}
                                       />
-                                      {showErrors && errors?.document ? <p className="text-xs font-semibold text-red-500">Este dato es obligatorio.</p> : null}
+                                      {showErrors && errors?.document ? <p className="text-xs font-semibold text-red-500">{t('requiredField')}</p> : null}
                                     </div>
                                   </div>
                                 </div>
@@ -701,12 +735,12 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                         ) : null}
 
                         <div className="space-y-1.5">
-                          <Label htmlFor="customerComments">Comentarios</Label>
+                          <Label htmlFor="customerComments">{t('comments')}</Label>
                           <Textarea
                             id="customerComments"
                             value={form.customerComments}
                             onChange={(event) => setForm((prev) => ({ ...prev, customerComments: event.target.value }))}
-                            placeholder="Indicaciones importantes para tu reserva"
+                            placeholder={t('commentsPlaceholder')}
                           />
                         </div>
 
@@ -721,7 +755,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                           disabled={Boolean(blockedError)}
                           className="h-12 w-full rounded-2xl bg-[#2BB8BF] text-base font-bold hover:bg-[#22A9B0] disabled:cursor-not-allowed disabled:opacity-60 text-white"
                         >
-                          Continuar al pago
+                          {t('continueToPayment')}
                           <ChevronRight className="ml-1 h-4 w-4" />
                         </Button>
                       </form>
@@ -739,16 +773,8 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                 >
                   <Card className="rounded-3xl border-[#D4E6F7] shadow-[0_16px_36px_rgba(15,66,116,0.08)]">
                     <CardHeader className="pb-3 text-center">
-                      <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">Finalizar reserva</CardTitle>
-                      <p className="text-sm text-[#5A7898]">Según el país seleccionado, te redirigimos automáticamente al medio de pago disponible.</p>
-                      <div className="rounded-2xl border border-[#2BB8BF]/30 bg-[#F0FCFC] p-4">
-                        <div className="text-sm font-bold text-[#0B2240]">
-                          {paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}
-                        </div>
-                        <div className="mt-1 text-xs text-[#5A7898]">
-                          {paymentMethod === 'mercadopago' ? 'Disponible para Argentina.' : 'Disponible para países fuera de Argentina.'}
-                        </div>
-                      </div>
+                    <CardTitle className="text-2xl font-black tracking-[-0.02em] text-[#0B2240]">{t('finalizeReservation')}</CardTitle>
+                      <p className="text-sm text-[#5A7898]">{t('redirectingToPayment')}</p>
                     </CardHeader>
                     <CardContent className="space-y-5">
                       <button
@@ -758,16 +784,25 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                         className="flex cursor-pointer w-full items-center justify-between rounded-2xl border border-[#D7E8F7] bg-white px-4 py-3.5 text-left transition hover:shadow-[0_12px_28px_rgba(15,66,116,0.1)] disabled:opacity-60"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E8F4FF]">
-                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin text-[#009EE3]" /> : null}
+                          <div className="flex h-10 w-16 items-center justify-center rounded-xl bg-[#E8F4FF] p-1.5">
+                            {isLoading ? (
+                              <Loader2 className="h-5 w-5 animate-spin text-[#009EE3]" />
+                            ) : (
+                              <Image
+                                src={paymentMethod === 'mercadopago' ? '/images/mercado-pago-logo.png' : '/images/wetravel-logo.png'}
+                                alt={paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}
+                                width={56}
+                                height={28}
+                                className="h-full w-full object-contain"
+                              />
+                            )}
                           </div>
                           <div>
-                            <div className="text-sm font-semibold text-[#0B2240]">Continuar con {paymentMethod === 'mercadopago' ? 'Mercado Pago' : 'WeTravel'}</div>
-                            <div className="text-xs text-[#5A7898]">Pago seguro en la plataforma seleccionada</div>
+                            <div className="text-sm font-semibold text-[#0B2240]">{t('continueToPayment')} · {paymentMethod === 'mercadopago' ? t('mercadoPago') : t('weTravel')}</div>
                           </div>
                         </div>
                         <div className="rounded-full bg-[#009EE3] px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white">
-                          Pagar
+                          {t('pay')}
                         </div>
                       </button>
 
@@ -783,7 +818,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                         onClick={() => setStep('form')}
                       >
                         <ArrowLeft className="h-4 w-4 inline-block mr-1" />
-                        Volver
+                        {t('back')}
                       </button>
                     </CardContent>
                   </Card>
@@ -794,7 +829,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
           <aside className="xl:sticky xl:top-8">
             <div className="rounded-3xl border border-[#D4E6F7] bg-white p-6 shadow-[0_16px_36px_rgba(15,66,116,0.08)]">
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7C95AE]">Resumen de tu reserva</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7C95AE]">{t('reservationSummary')}</div>
               <h2 className="mt-2 text-xl font-black leading-snug tracking-[-0.02em] text-[#0B2240]">{experience.title}</h2>
 
               <div className="mt-6 space-y-5">
@@ -876,7 +911,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
                           </span>
                           <span className="text-xs font-bold uppercase text-[#7C95AE]">{currency}</span>
                         </div>
-                        <p className="mt-0.5 text-[11px] font-medium text-[#7C95AE]">Precio final.</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-[#7C95AE]">{t('finalPrice')}</p>
                       </div>
                     </div>
                   </div>
@@ -892,7 +927,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
               <div className="mt-6 flex items-center gap-2 rounded-2xl bg-[#F8FBFF] px-3.5 py-3 ring-1 ring-[#E3EDF7] justify-center">
                 <Lock className="h-3.5 w-3.5 shrink-0 text-[#2BB8BF]" />
-                <span className="text-[11px] font-semibold text-[#486887]">Pago protegido</span>
+                        <span className="text-[11px] font-semibold text-[#486887]">{t('protectedPayment')}</span>
               </div>
             </div>
           </aside>

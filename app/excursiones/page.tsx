@@ -10,6 +10,9 @@ import { serializeFirestoreData } from '@/lib/utils/serialize';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/constants';
 import { buildPageTitle, siteConfig } from '@/lib/siteConfig';
 import { syncPackageCategoryData } from '@/lib/packages/category-utils';
+import { getLocale } from 'next-intl/server';
+import type { AppLocale } from '@/i18n/routing';
+import { localizeCategoria, localizePaquete } from '@/lib/i18n/cms-content';
 
 const siteUrl = SITE_URL;
 
@@ -102,9 +105,13 @@ export default async function ExcursionesPage({
 }: {
   searchParams?: SearchParams;
 }) {
+  const locale = (await getLocale()) as AppLocale;
   const resolvedSearchParams = (await searchParams) ?? {};
   const [paquetes, categorias] = await Promise.all([getPaquetes(), getCategorias()]);
-  const normalizedPaquetes = paquetes.map((paquete) => syncPackageCategoryData(paquete, categorias));
+  const localizedCategorias = await Promise.all(categorias.map((categoria) => localizeCategoria(categoria, locale)));
+  const normalizedPaquetes = await Promise.all(
+    paquetes.map((paquete) => localizePaquete(syncPackageCategoryData(paquete, categorias), locale))
+  );
 
   const tipos = normalizeParam(resolvedSearchParams.tipo);
   const tag = normalizeParam(resolvedSearchParams.tag);
@@ -122,11 +129,13 @@ export default async function ExcursionesPage({
         : []),
   ]);
 
-  let heroTitle = 'Excursiones';
-  let heroSubtitle = 'Descubrí excursiones y salidas pensadas para vivir experiencias inolvidables';
+  let heroTitle = locale === 'en' ? 'Excursions' : 'Excursiones';
+  let heroSubtitle = locale === 'en'
+    ? 'Discover excursions and departures designed for unforgettable experiences'
+    : 'Descubrí excursiones y salidas pensadas para vivir experiencias inolvidables';
   const categoriaPrincipal =
     destinosSeleccionados.length === 1
-      ? categorias.find((categoria) => {
+      ? localizedCategorias.find((categoria) => {
           const selectedDestino = destinosSeleccionados[0];
           return (
             normalizeText(categoria.slug) === selectedDestino ||
@@ -138,28 +147,28 @@ export default async function ExcursionesPage({
   if (categoriaPrincipal) {
     heroTitle = categoriaPrincipal.nombre;
     heroSubtitle =
-      categoriaPrincipal.descripcion || `Explorá las excursiones disponibles en ${categoriaPrincipal.nombre}`;
+      categoriaPrincipal.descripcion || `${locale === 'en' ? 'Explore the excursions available in' : 'Explorá las excursiones disponibles en'} ${categoriaPrincipal.nombre}`;
   } else if (tipos.includes('grupal')) {
-    heroTitle = 'Salidas grupales';
-    heroSubtitle = 'Viajes organizados para compartir, con todo planificado';
+    heroTitle = locale === 'en' ? 'Group departures' : 'Salidas grupales';
+    heroSubtitle = locale === 'en' ? 'Organized trips to share, fully planned' : 'Viajes organizados para compartir, con todo planificado';
   } else if (tipos.includes('internacional')) {
-    heroTitle = 'Excursiones internacionales';
-    heroSubtitle = 'Explorá destinos internacionales con propuestas seleccionadas';
+    heroTitle = locale === 'en' ? 'International excursions' : 'Excursiones internacionales';
+    heroSubtitle = locale === 'en' ? 'Explore international destinations with selected proposals' : 'Explorá destinos internacionales con propuestas seleccionadas';
   } else if (tipos.includes('educativo')) {
-    heroTitle = 'Excursiones educativas';
-    heroSubtitle = 'Opciones pensadas para instituciones, contingentes y grupos';
+    heroTitle = locale === 'en' ? 'Educational excursions' : 'Excursiones educativas';
+    heroSubtitle = locale === 'en' ? 'Options designed for institutions, groups and contingents' : 'Opciones pensadas para instituciones, contingentes y grupos';
   } else if (tipos.includes('eventos') || tipos.includes('recitales')) {
-    heroTitle = 'Eventos / Recitales';
-    heroSubtitle = 'Eventos y recitales para compartir con tu grupo';
+    heroTitle = locale === 'en' ? 'Events / Concerts' : 'Eventos / Recitales';
+    heroSubtitle = locale === 'en' ? 'Events and concerts to enjoy with your group' : 'Eventos y recitales para compartir con tu grupo';
   } else if (transportes.length > 0) {
-    heroTitle = 'Excursiones con transporte';
-    heroSubtitle = 'Encontrá excursiones por tipo de transporte';
+    heroTitle = locale === 'en' ? 'Excursions with transport' : 'Excursiones con transporte';
+    heroSubtitle = locale === 'en' ? 'Find excursions by type of transport' : 'Encontrá excursiones por tipo de transporte';
   } else if (tag.includes('promo')) {
-    heroTitle = 'Promos';
-    heroSubtitle = 'Ofertas y oportunidades para viajar al mejor precio';
+    heroTitle = locale === 'en' ? 'Deals' : 'Promos';
+    heroSubtitle = locale === 'en' ? 'Offers and opportunities to travel at the best price' : 'Ofertas y oportunidades para viajar al mejor precio';
   } else if (tag.includes('escapada') || tag.includes('religioso')) {
-    heroTitle = 'Eventos / Recitales';
-    heroSubtitle = 'Eventos y recitales para compartir con tu grupo';
+    heroTitle = locale === 'en' ? 'Events / Concerts' : 'Eventos / Recitales';
+    heroSubtitle = locale === 'en' ? 'Events and concerts to enjoy with your group' : 'Eventos y recitales para compartir con tu grupo';
   }
 
   return (
@@ -180,7 +189,7 @@ export default async function ExcursionesPage({
         </div>
       </section>
 
-      <PaquetesClient paquetes={normalizedPaquetes} categorias={categorias} />
+      <PaquetesClient paquetes={normalizedPaquetes} categorias={localizedCategorias} />
 
       <HomeFooter />
     </>

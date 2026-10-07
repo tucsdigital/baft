@@ -6,6 +6,7 @@ import type { Metadata } from 'next';
 import { MapPin, Clock, Phone, Mail, Radio } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { siteConfig } from '@/lib/siteConfig';
+import { getTranslations } from 'next-intl/server';
 
 const siteUrl = SITE_URL;
 
@@ -15,7 +16,8 @@ export const metadata: Metadata = {
   alternates: { canonical: `${siteUrl}/contacto` },
 };
 
-export default function ContactoPage() {
+export default async function ContactoPage() {
+  const p = await getTranslations('public');
   const telefonos = [CONTACT_INFO.telefono, CONTACT_INFO.telefonoSecundario].filter(Boolean).join(' / ');
   return (
     <>
@@ -25,17 +27,14 @@ export default function ContactoPage() {
       <main className="bg-white min-h-screen pt-32 md:pt-40">
         <div className="container mx-auto px-4 md:px-6 lg:px-8 max-w-5xl mb-16">
           <div className="pt-24 mb-10">
-            <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6 tracking-tight">Contacto</h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6 tracking-tight">{p('contactTitle')}</h1>
             <p className="text-base md:text-lg text-gray-600 max-w-3xl leading-relaxed">
-              Te brindamos todas nuestras vías de contacto para que puedas despejar todas tus dudas. Responderemos tu mensaje a la brevedad.
-              <br className="hidden md:block" /> ¡Muchas gracias por elegirnos!
+              {p('contactDescription')}
             </p>
           </div>
 
           <div className="mb-8">
-            <h2 className="text-2xl md:text-3xl font-bold text-primary mb-8">
-              Somos {SITE_NAME}
-            </h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-primary mb-8">{p('weAre', { siteName: SITE_NAME })}</h2>
             
             <ul className="space-y-5 text-gray-700 text-base md:text-lg font-medium">
               <li className="flex items-center gap-4">
@@ -63,7 +62,7 @@ export default function ContactoPage() {
                     rel="noopener noreferrer"
                     className="hover:text-primary transition-colors"
                   >
-                    Canal de WhatsApp
+                    {p('channel')}
                   </a>
                 </li>
               )}

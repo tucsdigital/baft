@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 type DirectState =
   | { ok: true; reservationId?: string; reservationCode?: string; paymentStatus?: string; emailStatus?: string }
@@ -20,6 +21,7 @@ export default function DirectVerification({
   intentId: string;
   paymentId?: string;
 }) {
+  const t = useTranslations('checkout');
   const [state, setState] = useState<DirectState | null>(null);
   const [checking, setChecking] = useState(true);
   const triedRef = useRef(false);
@@ -78,22 +80,22 @@ export default function DirectVerification({
         {state.reservationCode ? (
           <div className="rounded-xl border border-gray-200 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Código de reserva
+              {t('reservationCodeLabel')}
             </p>
             <p className="mt-1 font-mono text-sm text-gray-900">{state.reservationCode}</p>
             <p className="mt-2 text-sm text-gray-600">
-              Guardalo para presentarlo el día de la actividad.
+              {t('saveCode')}
             </p>
           </div>
         ) : null}
         <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <p className="font-semibold">Reserva registrada correctamente.</p>
+            <p className="font-semibold">{t('reservationRegistered')}</p>
             <p className="mt-1 text-emerald-700">
               {state.emailStatus === 'sent'
-                ? 'Enviamos la confirmación a tu correo.'
-                : 'Te enviaremos la confirmación por correo en los próximos minutos.'}
+                ? t('emailSent')
+                : t('emailQueued')}
             </p>
           </div>
         </div>
@@ -106,8 +108,8 @@ export default function DirectVerification({
       <div className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
         <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin" />
         <div>
-          <p className="font-semibold text-gray-800">Confirmando tu pago…</p>
-          <p className="mt-1">Estamos registrando tu reserva y preparando el email de confirmación.</p>
+          <p className="font-semibold text-gray-800">{t('confirmingPayment')}</p>
+          <p className="mt-1">{t('registeringReservation')}</p>
         </div>
       </div>
     );
@@ -116,15 +118,15 @@ export default function DirectVerification({
   if (state && !state.ok) {
     return (
       <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        {state.message === 'Pago en verificación' || !state.message ? (
+        {state.message === t('paymentInVerification') || !state.message ? (
           <Clock className="mt-0.5 h-5 w-5 shrink-0" />
         ) : (
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
         )}
         <div>
-          <p className="font-semibold">Tu pago está en verificación.</p>
+          <p className="font-semibold">{t('paymentVerification')}</p>
           <p className="mt-1 text-amber-700">
-            Si se aprueba, confirmaremos la compra y te enviaremos el correo automáticamente.
+            {t('paymentVerificationDescription')}
           </p>
         </div>
       </div>

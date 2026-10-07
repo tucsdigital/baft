@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import Navbar from '@/components/Navbar';
 import HomeFooter from '@/components/home/HomeFooter';
 import { Button } from '@/components/ui/button';
@@ -41,10 +42,10 @@ function formatCurrency(amount: number, currency: string) {
   return `${value.toFixed(2)} ${c}`;
 }
 
-function formatDateLabel(date: string) {
-  if (!date || date === 'sin-fecha') return 'Fecha por coordinar';
+function formatDateLabel(date: string, locale: string, fallback: string) {
+  if (!date || date === 'sin-fecha') return fallback;
   try {
-    return new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', {
+    return new Date(`${date}T12:00:00`).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -56,6 +57,8 @@ function formatDateLabel(date: string) {
 }
 
 export default function ConsultarReservaClient({ initialCode }: { initialCode: string }) {
+  const t = useTranslations('public');
+  const locale = useLocale();
   const [code, setCode] = useState(initialCode);
   const [email, setEmail] = useState('');
   const [document, setDocument] = useState('');
@@ -84,12 +87,12 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
       });
       const json = await res.json().catch(() => null);
       if (!json?.ok) {
-        setError('No pudimos verificar la reserva. Revisá los datos e intentá de nuevo.');
+        setError(t('lookupError'));
         return;
       }
       setReservation(json.reservation as PublicReservation);
     } catch {
-      setError('No pudimos verificar la reserva. Revisá los datos e intentá de nuevo.');
+      setError(t('lookupError'));
     } finally {
       setLoading(false);
     }
@@ -101,28 +104,26 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
 
       <main className="container mx-auto max-w-3xl px-4 py-10">
         <div className="mb-6 space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Consultar reserva</h1>
-          <p className="text-sm text-gray-600">
-            Ingresá tu código de reserva y validá tu identidad con email o DNI para ver el detalle.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">{t('lookupTitle')}</h1>
+          <p className="text-sm text-gray-600">{t('lookupDescription')}</p>
         </div>
 
         <Card className="bg-white/90 shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-base font-semibold text-gray-900">Datos de consulta</CardTitle>
+            <CardTitle className="text-base font-semibold text-gray-900">{t('lookupData')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
-              <Label>Código o número de reserva</Label>
+              <Label>{t('reservationCodeOrNumber')}</Label>
               <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ej: 000001" />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
-                <Label>Email (opcional)</Label>
+                <Label>{t('optionalEmail')}</Label>
                 <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tuemail@mail.com" />
               </div>
               <div className="space-y-1">
-                <Label>DNI (opcional)</Label>
+                <Label>{t('optionalDocument')}</Label>
                 <Input value={document} onChange={(e) => setDocument(e.target.value)} placeholder="Solo números" />
               </div>
             </div>
@@ -139,10 +140,10 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
                 }}
                 disabled={loading}
               >
-                Limpiar
+                {t('clear')}
               </Button>
               <Button onClick={() => void submit()} disabled={!canSubmit}>
-                {loading ? 'Buscando...' : 'Consultar'}
+                {loading ? t('searching') : t('consult')}
               </Button>
             </div>
 
@@ -157,7 +158,7 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
         {reservation ? (
           <Card className="mt-6 bg-white/90 shadow-2xl">
             <CardHeader>
-              <CardTitle className="text-base font-semibold text-gray-900">Detalle de tu reserva</CardTitle>
+              <CardTitle className="text-base font-semibold text-gray-900">{t('reservationDetail')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {(() => {
@@ -184,55 +185,53 @@ export default function ConsultarReservaClient({ initialCode }: { initialCode: s
 
               <div className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 md:grid-cols-2">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Código</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('reservationCode')}</div>
                   <div className="mt-1 font-mono font-semibold text-gray-900">{reservation.code}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Titular</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('holder')}</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.customerMasked.name}</div>
                   <div className="text-xs text-gray-600">{reservation.customerMasked.email}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Paquete</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('excursion')}</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.packageTitle}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Salida</div>
-                  <div className="mt-1 font-semibold text-gray-900">{formatDateLabel(reservation.departureDate)}</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('departure')}</div>
+                  <div className="mt-1 font-semibold text-gray-900">{formatDateLabel(reservation.departureDate, locale, t('dateToCoordinate'))}</div>
                   <div className="text-xs text-gray-600">{reservation.people} pasajero(s)</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Pago</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('payment')}</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.paymentStatusLabel || reservation.paymentStatus}</div>
                   <div className="text-xs text-gray-600">{formatCurrency(reservation.amountTotal, reservation.currency)}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Extras</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('extras')}</div>
                   <div className="mt-1 font-semibold text-gray-900">
                     {reservation.selectedExtras.length
                       ? reservation.selectedExtras.map((extra) => extra.label).join(', ')
-                      : 'Sin extras'}
+                      : t('withoutExtras')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Venta</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('sale')}</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.commercialStatusLabel || reservation.status}</div>
                   <div className="text-xs text-gray-600">{reservation.operationalStatusLabel || '—'}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-500">Comunicación</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">{t('communication')}</div>
                   <div className="mt-1 font-semibold text-gray-900">{reservation.voucherStatus || '—'}</div>
-                  <div className="text-xs text-gray-600">Email cliente: {reservation.customerEmailStatus || '—'}</div>
+                  <div className="text-xs text-gray-600">{t('customerEmail')}: {reservation.customerEmailStatus || '—'}</div>
                 </div>
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Aviso anti-estafas</div>
-                <div className="mt-2">
-                  {SITE_NAME} no solicita pagos fuera de los canales oficiales. Ante dudas, contactanos por WhatsApp o email.
-                </div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t('antiScamNotice')}</div>
+                <div className="mt-2">{t('officialChannelsNotice', { siteName: SITE_NAME })}</div>
                 <div className="mt-2 text-sm text-gray-900">
-                  Contacto oficial: <span className="font-semibold">{CONTACT_INFO.email}</span> ·{' '}
+                  {t('officialContact')}: <span className="font-semibold">{CONTACT_INFO.email}</span> ·{' '}
                   <span className="font-semibold">{CONTACT_INFO.telefono}</span>
                 </div>
               </div>

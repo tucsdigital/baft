@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { Paquete } from '@/types';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Headphones, Info, MapPin, ShieldCheck, Users, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Info, MapPin, ShieldCheck, Users, X } from 'lucide-react';
 import BookingAddonsStep from '@/components/paquete/BookingAddonsStep';
-import { getWhatsAppLinkForPackage } from '@/lib/utils/whatsapp';
+import WhatsAppOfficialIcon from '@/components/WhatsAppOfficialIcon';
+import { getWhatsAppLink } from '@/lib/utils/whatsapp';
 import {
   buildBookingCalendarMonth,
   filterAvailabilityToBookingWindow,
@@ -35,7 +37,6 @@ interface PaqueteSidebarProps {
   bookingDates?: BookingAvailabilityItem[];
 }
 
-const WEEK_DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MODAL_SPRING = { type: 'spring', stiffness: 340, damping: 32 } as const;
 
 const modalSlideVariants = {
@@ -63,11 +64,11 @@ function parsePromoDeadline(value?: string | null) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function formatPromoDeadline(value?: string | null) {
+function formatPromoDeadline(value: string | null | undefined, locale: string) {
   const parsed = parsePromoDeadline(value);
   if (!parsed) return '';
   return parsed
-    .toLocaleDateString('es-AR', {
+    .toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -75,15 +76,15 @@ function formatPromoDeadline(value?: string | null) {
     .replace('.', '');
 }
 
-function formatDateLabel(value: string) {
-  if (!value || value === 'sin-fecha') return 'A coordinar';
+function formatDateLabel(value: string, locale: string) {
+  if (!value || value === 'sin-fecha') return locale === 'en' ? 'To be coordinated' : 'A coordinar';
   const parsed = new Date(`${value}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+  return parsed.toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function formatMonthLabel(year: number, month: number) {
-  return new Date(year, month, 1).toLocaleDateString('es-AR', {
+function formatMonthLabel(year: number, month: number, locale: string) {
+  return new Date(year, month, 1).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', {
     month: 'long',
     year: 'numeric',
   });
@@ -98,16 +99,29 @@ function isWithin48Hours(isoDate: string): boolean {
 }
 
 export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSidebarProps) {
+  const locale = useLocale();
+  const t = useTranslations('checkout');
+  const s = useTranslations('sidebar');
+  const numLocale = locale === 'en' ? 'en-US' : 'es-AR';
+  const weekDays = s('weekdays').split(',');
   const destino = paquete.destino || paquete.eventoLugar || '-';
   const duracion = paquete.duracion || '-';
   const bookingEnabled = paquete.bookingConfig?.enabled !== false;
   const maxPeoplePerBooking = paquete.bookingConfig?.maxPeoplePerBooking ?? paquete.capacidadMaxima ?? 6;
+  const defaultAdultsLabel = s('defaultAdults');
+  const defaultMinorsLabel = s('defaultMinors');
   const peopleCategories: PeopleCategoryConfig[] = useMemo(
-    () => normalizePeopleCategories((paquete.bookingConfig as any)?.peopleCategories, maxPeoplePerBooking),
-    [maxPeoplePerBooking, paquete.bookingConfig]
+    () =>
+      normalizePeopleCategories((paquete.bookingConfig as any)?.peopleCategories, maxPeoplePerBooking).map((category) => {
+        if (locale !== 'en') return category;
+        if (category.key === 'adults' && category.label === 'Adultos') return { ...category, label: defaultAdultsLabel };
+        if (category.key === 'minors' && category.label === 'Menores') return { ...category, label: defaultMinorsLabel };
+        return category;
+      }),
+    [maxPeoplePerBooking, paquete.bookingConfig, locale, defaultAdultsLabel, defaultMinorsLabel]
   );
   const specialPrice = Number(paquete.precioDescuentoPrimerosCupos ?? 0);
-  const specialDeadline = formatPromoDeadline(paquete.tarifaEspecialFechaLimite);
+  const specialDeadline = formatPromoDeadline(paquete.tarifaEspecialFechaLimite, locale);
   const specialDeadlineDate = parsePromoDeadline(paquete.tarifaEspecialFechaLimite);
   const [renderedAt] = useState(() => Date.now());
   const baseDate = useMemo(() => new Date(renderedAt), [renderedAt]);
@@ -116,7 +130,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     () => (minLeadHours > 0 ? getFirstBookableDateIso(minLeadHours, baseDate) : ''),
     [baseDate, minLeadHours]
   );
-  const leadTimeNotice = useMemo(() => (minLeadHours > 0 ? buildLeadTimeMessage(minLeadHours) : ''), [minLeadHours]);
+  const leadTimeNotice = useMemo(() => (minLeadHours > 0 ? buildLeadTimeMessage(minLeadHours, locale) : ''), [minLeadHours, locale]);
   const hasSpecialPrice =
     specialPrice > 0 &&
     paquete.precio > 0 &&
@@ -135,7 +149,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     normalizePeopleBreakdown({ breakdown: null, categories: peopleCategories })
   );
   const people = Math.max(1, Math.floor(getPeopleBreakdownTotal(pax)));
-  const whatsappHref = useMemo(() => getWhatsAppLinkForPackage(paquete.titulo), [paquete.titulo]);
+  const whatsappMessage = s('whatsappMessage', { title: paquete.titulo });
+  const whatsappHref = useMemo(() => getWhatsAppLink(whatsappMessage), [whatsappMessage]);
   const paymentMethods = ['VISA', 'mastercard', 'NARANJA', 'mercado pago'];
   const condiciones = useMemo(
     () =>
@@ -222,6 +237,18 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
 
   useEffect(() => setMounted(true), []);
 
+  const [referralCode, setReferralCode] = useState('');
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const fromUrl = (url.searchParams.get('ref') || url.searchParams.get('referral') || url.searchParams.get('code') || '').trim();
+      if (fromUrl) sessionStorage.setItem('referral_code', fromUrl);
+      setReferralCode(fromUrl || sessionStorage.getItem('referral_code') || '');
+    } catch {
+      setReferralCode('');
+    }
+  }, []);
+
   useEffect(() => {
     if (!tooltipInfo.visible) return;
     const handler = () => setTooltipInfo({ visible: false, x: 0, y: 0, date: '' });
@@ -299,244 +326,204 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
     if (selectedAddonIds.length > 0) {
       params.set('addons', selectedAddonIds.join(','));
     }
-    return `/checkout?${params.toString()}`;
-  }, [paquete.slug, people, pax, selectedAddonIds, selectedDate]);
+    if (referralCode) {
+      params.set('ref', referralCode);
+    }
+    return `/${locale}/checkout?${params.toString()}`;
+  }, [locale, paquete.slug, people, pax, referralCode, selectedAddonIds, selectedDate]);
 
-  const modalSteps = hasAddons ? ['Fecha', 'Adicionales', 'Reserva'] : ['Fecha', 'Reserva'];
+  const modalSteps = hasAddons ? [t('chooseDate'), t('addExtras'), t('reservation')] : [t('chooseDate'), t('reservation')];
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-[#D4E6F7] bg-white p-4 shadow-[0_14px_34px_rgba(15,66,116,0.08)] sm:p-5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-black">
-            Reserva directa
-          </div>
-        </div>
+      <div className="rounded-3xl border border-[#D4E6F7] bg-white p-5 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
+        <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-500">{t('directReservation')}</div>
 
-        <div className="mt-4">
+        <div className="mt-3">
           <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Precio {paquete.mostrarDesde ? 'desde' : ''}
+            {paquete.mostrarDesde ? s('priceFrom') : s('price')}
           </div>
 
           {hasSpecialPrice ? (
-            <div className="mt-3">
-              <div className="flex items-end gap-3 text-gray-500">
-                <div className="text-[22px] font-semibold leading-none line-through decoration-2">
-                  ${paquete.precio.toLocaleString('es-AR')}
-                </div>
-                <div className="mb-0.5 text-xs font-extrabold uppercase">{paquete.moneda || 'ARS'}</div>
+            <div className="mt-1">
+              <div className="flex items-baseline gap-2 text-gray-500">
+                <span className="text-lg font-semibold leading-none line-through decoration-2">
+                  ${paquete.precio.toLocaleString(numLocale)}
+                </span>
+                <span className="text-xs font-extrabold uppercase">{paquete.moneda || 'ARS'}</span>
               </div>
-
-              <div className="mt-1 flex items-end gap-3">
-                <div className="text-[36px] leading-none font-black tracking-[-0.03em] text-black sm:text-[44px]">
-                  ${specialPrice.toLocaleString('es-AR')}
-                </div>
-                <div className="mb-2 text-sm font-extrabold uppercase text-black">{paquete.moneda || 'ARS'}</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-[38px] font-black leading-none tracking-[-0.03em] text-black">
+                  ${specialPrice.toLocaleString(numLocale)}
+                </span>
+                <span className="text-sm font-extrabold uppercase text-black">{paquete.moneda || 'ARS'}</span>
               </div>
-
-              <div className="mt-2 text-sm font-semibold text-green-700">Tarifa especial</div>
-              <div className="mt-1 text-sm text-gray-600">Vigente hasta el {specialDeadline}</div>
-              <div className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Por persona</div>
+              <p className="mt-2 text-sm text-gray-600">
+                <span className="font-semibold text-green-700">{s('specialRate')}</span> · {s('validUntil', { date: specialDeadline })}
+              </p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">{s('perPerson')}</p>
             </div>
           ) : (
-            <div className="mt-1 flex items-end gap-3">
-                <div className="text-[36px] leading-none font-black tracking-[-0.02em] text-black sm:text-[44px]">
-                ${paquete.precio.toLocaleString('es-AR')}
-              </div>
-              <div className="mb-2 text-sm font-extrabold uppercase text-gray-600">{paquete.moneda || 'ARS'}</div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-[38px] font-black leading-none tracking-[-0.02em] text-black">
+                ${paquete.precio.toLocaleString(numLocale)}
+              </span>
+              <span className="text-sm font-extrabold uppercase text-gray-600">{paquete.moneda || 'ARS'}</span>
             </div>
           )}
         </div>
 
         {String((paquete as any)?.fechaVencimiento ?? '').trim() ? (
-          <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            <Clock className="h-4 w-4 text-gray-600" />
-            Vence: <span className="font-semibold text-gray-900">{String((paquete as any).fechaVencimiento)}</span>
-          </div>
+          <p className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+            <Clock className="h-4 w-4 text-gray-500" />
+            {t('expires')}: <span className="font-semibold text-gray-900">{String((paquete as any).fechaVencimiento)}</span>
+          </p>
         ) : null}
 
-        <div className="mt-4 space-y-2">
-          <div className="rounded-2xl bg-white p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gray-100">
-                <MapPin className="h-4 w-4 text-success" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Destino</div>
-                <div className="truncate text-sm font-bold text-black">{destino}</div>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gray-100">
-                <Calendar className="h-4 w-4 text-success" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha elegida</div>
-                <div className="truncate text-sm font-bold text-black">{formatDateLabel(selectedDate)}</div>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gray-100">
-                <Clock className="h-4 w-4 text-success" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Duración</div>
-                <div className="truncate text-sm font-bold text-black">{duracion}</div>
-              </div>
-            </div>
+        <dl className="mt-4 divide-y divide-gray-100 border-t border-gray-100 text-sm">
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <dt className="flex items-center gap-2 text-slate-500">
+              <MapPin className="h-4 w-4 text-success" />
+              {s('destination')}
+            </dt>
+            <dd className="truncate text-right font-bold text-black">{destino}</dd>
           </div>
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <dt className="flex items-center gap-2 text-slate-500">
+              <Calendar className="h-4 w-4 text-success" />
+              {t('selectedDate')}
+            </dt>
+            <dd className="truncate text-right font-bold text-black">{formatDateLabel(selectedDate, locale)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <dt className="flex items-center gap-2 text-slate-500">
+              <Clock className="h-4 w-4 text-success" />
+              {s('duration')}
+            </dt>
+            <dd className="truncate text-right font-bold text-black">{duracion}</dd>
+          </div>
+        </dl>
 
-          {bookingEnabled ? (
-            <div className="rounded-2xl bg-white p-4">
-              {step === 'people' ? (
-                <div className="space-y-4">
+        {bookingEnabled ? (
+          step === 'people' ? (
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <Users className="h-4 w-4 text-success" />
+                {t('people')}
+              </div>
 
-                  <div className="">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <Users className="h-4 w-4 text-success" />
-                      Personas
-                    </div>
-
-                    <div className="mt-3 grid gap-3">
-                      {peopleCategories.map((category) => {
-                        const value = Math.max(0, Number(pax[category.key] ?? category.min) || 0);
-                        const canIncrement = people < maxPeoplePerBooking && value < category.max;
-                        const canDecrement = value > category.min;
-                        const minLabel = category.min > 0 ? `Mínimo ${category.min}` : 'Opcional';
-                        return (
-                          <div
-                            key={category.key}
-                            className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3"
-                          >
-                            <div>
-                              <div className="text-sm font-bold text-black">{category.label}</div>
-                              <div className="text-xs text-slate-500">{minLabel}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPax((current) => ({
-                                    ...current,
-                                    [category.key]: Math.max(category.min, (Number(current[category.key] ?? 0) || 0) - 1),
-                                  }))
-                                }
-                                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-300 bg-white text-lg font-bold text-black transition hover:bg-gray-50 disabled:opacity-60"
-                                aria-label={`Restar ${category.label}`}
-                                disabled={!canDecrement}
-                              >
-                                -
-                              </button>
-                              <div className="min-w-[42px] text-center text-lg font-black text-black">{value}</div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!canIncrement) return;
-                                  setPax((current) => ({
-                                    ...current,
-                                    [category.key]: Math.min(category.max, (Number(current[category.key] ?? 0) || 0) + 1),
-                                  }));
-                                }}
-                                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-300 bg-white text-lg font-bold text-black transition hover:bg-gray-50 disabled:opacity-60"
-                                aria-label={`Sumar ${category.label}`}
-                                disabled={!canIncrement}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      <div className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-slate-600">
-                        Total: <span className="font-extrabold text-black">{people}</span> · Máximo por reserva:{' '}
-                        <span className="font-extrabold text-black">{maxPeoplePerBooking}</span>
+              <div className="mt-1 divide-y divide-gray-100">
+                {peopleCategories.map((category) => {
+                  const value = Math.max(0, Number(pax[category.key] ?? category.min) || 0);
+                  const canIncrement = people < maxPeoplePerBooking && value < category.max;
+                  const canDecrement = value > category.min;
+                  const minLabel = category.min > 0 ? s('minimum', { count: category.min }) : s('optional');
+                  return (
+                    <div key={category.key} className="flex items-center justify-between gap-3 py-2.5">
+                      <div>
+                        <div className="text-sm font-bold text-black">{category.label}</div>
+                        <div className="text-xs text-slate-500">{minLabel}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPax((current) => ({
+                              ...current,
+                              [category.key]: Math.max(category.min, (Number(current[category.key] ?? 0) || 0) - 1),
+                            }))
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 bg-white text-lg font-bold text-black transition hover:bg-gray-50 disabled:opacity-40"
+                          aria-label={s('subtract', { label: category.label })}
+                          disabled={!canDecrement}
+                        >
+                          -
+                        </button>
+                        <div className="min-w-[32px] text-center text-lg font-black text-black">{value}</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canIncrement) return;
+                            setPax((current) => ({
+                              ...current,
+                              [category.key]: Math.min(category.max, (Number(current[category.key] ?? 0) || 0) + 1),
+                            }));
+                          }}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 bg-white text-lg font-bold text-black transition hover:bg-gray-50 disabled:opacity-40"
+                          aria-label={s('add', { label: category.label })}
+                          disabled={!canIncrement}
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
-
-                    {visibleBookingDates.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={openCalendar}
-                        disabled={bookableBookingDates.length === 0}
-                        className="group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-30"
-                      >
-                        Continuar
-                        <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                      </button>
-                    ) : (
-                      <Link
-                        href={bookingHref}
-                        className="group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98]"
-                      >
-                        Reservar
-                        <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm text-slate-700">
-              Las reservas online no están habilitadas para esta experiencia en este momento.
-            </div>
-          )}
-
-          <div className='rounded-2xl bg-white px-4'>
-            <a
-              href={whatsappHref}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-11 w-full items-center justify-center rounded-2xl border border-success bg-white font-bold text-success-strong transition hover:bg-green-50"
-            >
-              Consultar por WhatsApp
-            </a>
-
-            {condiciones.length > 0 ? (
-              <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 text-sm text-slate-700 mt-4">
-                {condiciones.map((item, index) => (
-                  <div key={`${item.titulo}-${index}`} className="flex items-start gap-2.5">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                    <div className="min-w-0">
-                      <div className="font-semibold text-black">{item.titulo}</div>
-                      <div className="mt-0.5 text-slate-600">{item.texto}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            ) : null}
-          </div>
-        </div>
+
+              <p className="mt-1 text-xs text-slate-500">
+                {t('people')}: <span className="font-extrabold text-black">{people}</span> · {t('maximumPerBooking')}:{' '}
+                <span className="font-extrabold text-black">{maxPeoplePerBooking}</span>
+              </p>
+
+              {visibleBookingDates.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={openCalendar}
+                  disabled={bookableBookingDates.length === 0}
+                  className="group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-30"
+                >
+                  {t('continue')}
+                  <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                </button>
+              ) : (
+                <Link
+                  href={bookingHref}
+                  className="group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98]"
+                >
+                  {s('book')}
+                  <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                </Link>
+              )}
+
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] text-[15px] font-semibold text-white transition hover:bg-[#1EBE5A] active:scale-[0.98]"
+              >
+                <WhatsAppOfficialIcon className="h-5 w-5" />
+                {t('askWhatsApp')}
+              </a>
+            </div>
+          ) : null
+        ) : (
+          <p className="border-t border-gray-100 pt-3 text-sm text-slate-700">{s('bookingDisabled')}</p>
+        )}
+
+        {condiciones.length > 0 ? (
+          <ul className="mt-4 space-y-2.5 border-t border-gray-100 pt-3 text-sm text-slate-700">
+            {condiciones.map((item, index) => (
+              <li key={`${item.titulo}-${index}`} className="flex items-start gap-2.5">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                <div className="min-w-0">
+                  <div className="font-semibold text-black">{item.titulo}</div>
+                  <div className="mt-0.5 text-slate-600">{item.texto}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
-      <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="text-sm font-bold text-black">¿Tenés dudas?</div>
-        <div className="mt-2 flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100">
-            <Headphones className="h-5 w-5 text-success" />
+      <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-black">
+            <ShieldCheck className="h-4 w-4 text-success" />
+            {s('safePurchase')}
           </div>
-          <div className="min-w-0">
-            <div className="text-sm text-slate-700">Nuestro equipo te asesora de forma personalizada.</div>
-            <a href={whatsappHref} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-success hover:underline">
-              Consultar por WhatsApp
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-center gap-2 text-sm font-bold text-black">
-          <ShieldCheck className="h-4 w-4 text-success" />
-          Comprás tranquila
-        </div>
-        <p className="mt-1 text-xs text-slate-600">Tu compra está protegida</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {paymentMethods.map((method) => (
-            <span key={method} className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">
-              {method}
-            </span>
-          ))}
+          <p className="mt-1 text-xs text-slate-600">{s('protectedPurchase')}</p>
+          <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">{paymentMethods.join(' · ')}</p>
         </div>
       </div>
 
@@ -558,7 +545,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
               transition={MODAL_SPRING}
               role="dialog"
               aria-modal="true"
-              aria-label="Elegí tu reserva"
+              aria-label={t('chooseReservation')}
               className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:max-h-[calc(100vh-2rem)]"
             >
               <div className="relative border-b border-gray-100 px-5 pb-4 pt-5">
@@ -566,7 +553,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                   type="button"
                   onClick={closeModal}
                   className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-gray-100 hover:text-black"
-                  aria-label="Cerrar"
+                  aria-label={s('close')}
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -597,20 +584,19 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                 ) : null}
 
                 <div className="text-lg font-extrabold text-black">
-                  {step === 'calendar' ? 'Elegí tu fecha' : 'Sumá adicionales'}
+                  {step === 'calendar' ? t('chooseDate') : t('addExtras')}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
                   {step === 'calendar' ? (
                     <>
-                      Disponibilidad para <span className="font-extrabold text-black">{people}</span>{' '}
-                      {people === 1 ? 'persona' : 'personas'}.
+                      {t('availabilityFor', { count: people, unit: people === 1 ? t('person') : t('peopleUnit') })}
                     </>
                   ) : (
                     <>
-                      <span className="font-extrabold text-black">{formatDateLabel(selectedDate)}</span>
+                      <span className="font-extrabold text-black">{formatDateLabel(selectedDate, locale)}</span>
                       {' · '}
                       <span className="font-extrabold text-black">{people}</span>{' '}
-                      {people === 1 ? 'persona' : 'personas'}.
+                      {people === 1 ? t('person') : t('peopleUnit')}.
                     </>
                   )}
                 </div>
@@ -635,7 +621,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               type="button"
                               onClick={goPrevMonth}
                               disabled={activeMonthIndex === 0}
-                              aria-label="Mes anterior"
+                              aria-label={s('prevMonth')}
                               className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-all duration-200 hover:bg-neutral-100 hover:text-neutral-900 active:scale-90 disabled:pointer-events-none disabled:opacity-25"
                             >
                               <ChevronLeft className="h-4 w-4" />
@@ -652,12 +638,12 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                   transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                                   className="text-[15px] font-bold capitalize tracking-[-0.01em] text-neutral-900"
                                 >
-                                  {formatMonthLabel(activeMonth.year, activeMonth.month)}
+                                  {formatMonthLabel(activeMonth.year, activeMonth.month, locale)}
                                 </motion.div>
                               </AnimatePresence>
                               {months.length > 1 ? (
                                 <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-300">
-                                  {activeMonthIndex + 1} / {months.length} meses con salidas
+                                  {s('monthsWithDepartures', { current: activeMonthIndex + 1, total: months.length })}
                                 </div>
                               ) : null}
                             </div>
@@ -665,7 +651,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               type="button"
                               onClick={goNextMonth}
                               disabled={activeMonthIndex >= months.length - 1}
-                              aria-label="Mes siguiente"
+                              aria-label={s('nextMonth')}
                               className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-all duration-200 hover:bg-neutral-100 hover:text-neutral-900 active:scale-90 disabled:pointer-events-none disabled:opacity-25"
                             >
                               <ChevronRight className="h-4 w-4" />
@@ -685,7 +671,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                 className="min-h-[296px]"
                               >
                                 <div className="grid grid-cols-7 gap-1">
-                                  {WEEK_DAYS.map((day, dayIndex) => (
+                                  {weekDays.map((day, dayIndex) => (
                                     <div
                                       key={`${activeMonthKey}-weekday-${dayIndex}`}
                                       className="flex h-8 items-center justify-center text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400"
@@ -753,7 +739,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                             ? 'scale-105 bg-neutral-900 text-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.5)]'
                                             : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-900 hover:text-white'
                                             }`}
-                                          aria-label={`Seleccionar ${formatDateLabel(cell.isoDate)}. ${cell.available} cupos disponibles.`}
+                                          aria-label={`${s('select')} ${formatDateLabel(cell.isoDate, locale)}. ${s('spotsAvailable', { count: cell.available })}.`}
                                           aria-pressed={isSelected}
                                         >
                                           {dayContent}
@@ -773,10 +759,10 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                                           }`}
                                         aria-label={
                                           cell.isSoldOut
-                                            ? `${cell.day} agotado`
+                                            ? s('soldOut', { day: cell.day })
                                             : cell.isTooSoon
-                                              ? `${cell.day} fuera del plazo de reserva (mínimo ${minLeadHours} hs de anticipación)`
-                                              : `${cell.day} sin salida`
+                                              ? s('outsideLeadTime', { day: cell.day, hours: minLeadHours })
+                                              : s('noDeparture', { day: cell.day })
                                         }
                                       >
                                         {dayContent}
@@ -798,8 +784,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                             </div>
                           ) : null}
                           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
-                            No hay fechas disponibles para reserva en este momento. Probá más adelante o consultanos por
-                            WhatsApp.
+                            {t('noDatesAvailable')}
                           </div>
                         </div>
                       )}
@@ -817,19 +802,19 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               <div className="flex items-end justify-between gap-3">
                                 <div>
                                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
-                                    Salida elegida
+                                    {s('chosenDeparture')}
                                   </div>
                                   <div className="mt-1 text-[15px] font-bold capitalize tracking-[-0.01em] text-neutral-900">
-                                    {formatDateLabel(selectedDate)}
+                                    {formatDateLabel(selectedDate, locale)}
                                   </div>
                                 </div>
                                 {selectedAvailability ? (
                                   <div className="text-right">
                                     <div className="text-[15px] font-bold tracking-[-0.01em] text-neutral-900">
                                       {getSalidaForDate(selectedDate)?.moneda || paquete.moneda || 'ARS'} $
-                                      {Number(getSalidaForDate(selectedDate)?.precio ?? paquete.precio ?? 0).toLocaleString('es-AR')}
+                                      {Number(getSalidaForDate(selectedDate)?.precio ?? paquete.precio ?? 0).toLocaleString(numLocale)}
                                     </div>
-                                    <div className="text-[11px] font-medium text-neutral-400">por persona</div>
+                                    <div className="text-[11px] font-medium text-neutral-400">{s('perPersonLower')}</div>
                                   </div>
                                 ) : null}
                               </div>
@@ -842,7 +827,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               exit={{ opacity: 0 }}
                               className="text-center text-[13px] text-neutral-400"
                             >
-                              Elegí una fecha del calendario para continuar
+                              {t('chooseDateToContinue')}
                             </motion.p>
                           )}
                         </AnimatePresence>
@@ -854,7 +839,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                             disabled={!selectedDate}
                             className="group mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-30"
                           >
-                            Continuar
+                            {t('continue')}
                             <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                           </button>
                         ) : (
@@ -869,7 +854,7 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                               : 'pointer-events-none bg-neutral-200 text-white'
                               }`}
                           >
-                            Reservar
+                            {s('book')}
                             <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                           </Link>
                         )}
@@ -897,19 +882,19 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                           <div className="mb-4 flex items-end justify-between gap-3">
                             <div>
                               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
-                                Total adicionales
+                                {s('totalAddons')}
                               </div>
                               <div className="mt-1 text-[13px] font-medium text-neutral-500">
-                                {selectedAddonIds.length} {selectedAddonIds.length === 1 ? 'elegido' : 'elegidos'}
+                                {s('chosenCount', { count: selectedAddonIds.length })}
                               </div>
                             </div>
                             <div className="text-right text-[15px] font-bold tracking-[-0.01em] text-neutral-900">
-                              + {addonCurrencyLabel} ${selectedAddonsTotal.toLocaleString('es-AR')}
+                              + {addonCurrencyLabel} ${selectedAddonsTotal.toLocaleString(numLocale)}
                             </div>
                           </div>
                         ) : (
                           <p className="mb-4 text-center text-[13px] text-neutral-400">
-                            Podés reservar sin adicionales o tocar una tarjeta para sumarla.
+                            {s('noAddonsHint')}
                           </p>
                         )}
 
@@ -920,14 +905,14 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
                             className="group flex h-12 items-center justify-center gap-1.5 rounded-full border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-all duration-300 hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 active:scale-[0.98]"
                           >
                             <ChevronLeft className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-0.5" />
-                            <span className="hidden sm:inline">Volver a la fecha</span>
-                            <span className="sm:hidden">Volver</span>
+                            <span className="hidden sm:inline">{t('backToDate')}</span>
+                            <span className="sm:hidden">{t('back')}</span>
                           </button>
                           <Link
                             href={bookingHref}
                             className="group flex h-12 w-full items-center justify-center gap-2 rounded-full bg-neutral-900 text-[15px] font-semibold tracking-[-0.01em] text-white transition-all duration-300 hover:bg-neutral-700 active:scale-[0.98]"
                           >
-                            Reservar
+                            {s('book')}
                             <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                           </Link>
                         </div>
@@ -951,8 +936,8 @@ export default function PaqueteSidebar({ paquete, bookingDates = [] }: PaqueteSi
           <div className="flex items-start gap-2.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
             <div>
-              <p className="text-sm font-semibold text-[#0B2240]">Para reservar días próximos</p>
-              <p className="mt-1 text-sm text-[#5A7898]">Comunicate con nosotros</p>
+              <p className="text-sm font-semibold text-[#0B2240]">{s('upcomingDaysTitle')}</p>
+              <p className="mt-1 text-sm text-[#5A7898]">{t('contactUsShort')}</p>
               <a
                 href={whatsappHref}
                 target="_blank"

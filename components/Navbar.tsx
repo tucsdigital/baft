@@ -8,6 +8,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, Menu, Phone, X } from 'lucide-react';
 import { renderTemplate, siteConfig } from '@/lib/siteConfig';
 import { getWhatsAppLink } from '@/lib/utils/whatsapp';
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface NavbarProps {
   transparent?: boolean;
@@ -51,6 +53,8 @@ export default function Navbar({
   const [destinosMobileOpen, setDestinosMobileOpen] = useState(false);
   const [destinos, setDestinos] = useState<DestinoNavItem[]>([]);
   const [mounted, setMounted] = useState(false);
+  const t = useTranslations('common');
+  const p = useTranslations('public');
 
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || '{{siteName}} Logo');
   const whatsAppHref = getWhatsAppLink();
@@ -177,7 +181,7 @@ export default function Navbar({
 
         <div className="hidden items-center gap-6 lg:flex">
           <Link href="/" className={`${linkBase} ${linkIdle} relative after:absolute after:-bottom-[22px] after:left-0 after:h-[2px] after:w-full after:rounded-full after:opacity-0 after:transition-opacity hover:after:opacity-100 md:after:-bottom-[26px] ${activeLine}`}>
-            Inicio
+            {t('home')}
           </Link>
 
           <div className="relative">
@@ -189,23 +193,24 @@ export default function Navbar({
               aria-haspopup="true"
               aria-expanded={destinosOpen}
             >
-              Destinos
+              {t('destinations')}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${destinosOpen ? 'rotate-180' : ''}`} />
             </button>
           </div>
 
           <Link href="/excursiones" className={`${linkBase} ${linkIdle} relative after:absolute after:-bottom-[22px] after:left-0 after:h-[2px] after:w-full after:rounded-full after:opacity-0 after:transition-opacity hover:after:opacity-100 md:after:-bottom-[26px] ${activeLine}`}>
-            Excursiones
+            {t('excursions')}
           </Link>
           <Link href="/#nosotros" className={`${linkBase} ${linkIdle} relative after:absolute after:-bottom-[22px] after:left-0 after:h-[2px] after:w-full after:rounded-full after:opacity-0 after:transition-opacity hover:after:opacity-100 md:after:-bottom-[26px] ${activeLine}`}>
-            Sobre nosotros
+            {p('about')}
           </Link>
           <Link href="/contacto" className={`${linkBase} ${linkIdle} relative after:absolute after:-bottom-[22px] after:left-0 after:h-[2px] after:w-full after:rounded-full after:opacity-0 after:transition-opacity hover:after:opacity-100 md:after:-bottom-[26px] ${activeLine}`}>
-            Contacto
+            {t('contact')}
           </Link>
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
+          <LanguageSwitcher />
           <a
             href={whatsAppHref}
             target="_blank"
@@ -215,7 +220,7 @@ export default function Navbar({
             }`}
           >
             <Phone className="h-4 w-4" />
-            Consultá ahora
+            {p('contactUs')}
           </a>
         </div>
 
@@ -226,7 +231,7 @@ export default function Navbar({
             event.stopPropagation();
             setMobileMenuOpen((current) => !current);
           }}
-          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-label={mobileMenuOpen ? t('closeMenu') : t('openMenu')}
         >
           {mobileMenuOpen ? (
             <X className={`h-6 w-6 ${isLightChrome ? 'text-[#0B2240]' : 'text-white'}`} />
@@ -264,7 +269,7 @@ export default function Navbar({
                       Explorá la Patagonia
                     </div>
                     <div className={`mt-2 text-xs ${isLightChrome ? 'text-[#0B2240]/80' : 'text-white/78'}`}>
-                      Descubrí los mejores destinos y experiencias, con la curación BAFT.
+                      {p('curatedDestinations')}
                     </div>
                     <Link
                       href="/excursiones"
@@ -275,7 +280,7 @@ export default function Navbar({
                       }`}
                       onClick={() => setDestinosOpen(false)}
                     >
-                      Ver todos los destinos
+                      {t('viewAllDestinations')}
                       <ChevronRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -310,7 +315,7 @@ export default function Navbar({
                               {getDestinoSubtitle(item)}
                             </div>
                             <div className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${isLightChrome ? 'text-[#0B7FA5]' : 'text-[#8FCB81]'}`}>
-                              Ver destino <ChevronRight className="h-4 w-4" />
+                              {t('viewDestination')} <ChevronRight className="h-4 w-4" />
                             </div>
                           </div>
                         </div>
@@ -345,7 +350,7 @@ export default function Navbar({
               >
               <div className="flex min-h-dvh flex-col p-6">
                 <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#5A7898]">Menú</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#5A7898]">{t('menu')}</div>
                   <button
                     type="button"
                     onClick={() => {
@@ -353,7 +358,7 @@ export default function Navbar({
                       setDestinosMobileOpen(false);
                     }}
                     className="rounded-full bg-[#F2F6FB] p-2"
-                    aria-label="Cerrar menú"
+                    aria-label={t('closeMenu')}
                   >
                     <X className="h-5 w-5 text-[#0B2240]" />
                   </button>
@@ -368,7 +373,7 @@ export default function Navbar({
                       setDestinosMobileOpen(false);
                     }}
                   >
-                    Inicio
+                    {t('home')}
                   </Link>
 
                   <button
@@ -377,7 +382,7 @@ export default function Navbar({
                     className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[13px] font-semibold text-[#0B2240] hover:bg-[#F6FBFF]"
                     aria-expanded={destinosMobileOpen}
                   >
-                    Destinos
+                    {t('destinations')}
                     <ChevronDown className={`h-4 w-4 transition-transform ${destinosMobileOpen ? 'rotate-180' : ''}`} />
                   </button>
 
@@ -427,7 +432,7 @@ export default function Navbar({
                             setDestinosMobileOpen(false);
                           }}
                         >
-                          Ver todos <ChevronRight className="h-4 w-4" />
+                          {t('viewAllDestinations')} <ChevronRight className="h-4 w-4" />
                         </Link>
                       </motion.div>
                     ) : null}
@@ -441,7 +446,7 @@ export default function Navbar({
                       setDestinosMobileOpen(false);
                     }}
                   >
-                    Excursiones
+                    {t('excursions')}
                   </Link>
                   <Link
                     href="/#nosotros"
@@ -451,7 +456,7 @@ export default function Navbar({
                       setDestinosMobileOpen(false);
                     }}
                   >
-                    Sobre nosotros
+                    {p('about')}
                   </Link>
                   <Link
                     href="/contacto"
@@ -461,9 +466,13 @@ export default function Navbar({
                       setDestinosMobileOpen(false);
                     }}
                   >
-                    Contacto
+                    {t('contact')}
                   </Link>
                 </nav>
+
+                <div className="mt-5 flex justify-center">
+                  <LanguageSwitcher />
+                </div>
 
                 <a
                   href={whatsAppHref}
@@ -476,7 +485,7 @@ export default function Navbar({
                   }}
                 >
                   <Phone className="h-4 w-4" />
-                  Consultá ahora
+                    {p('contactUs')}
                 </a>
               </div>
               </motion.div>

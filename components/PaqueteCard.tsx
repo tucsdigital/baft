@@ -10,7 +10,8 @@ import { Clock, MapPin, ArrowRight, Share2 } from 'lucide-react';
 import { Paquete } from '@/types';
 import { getPackageFeatures } from '@/lib/utils/packageFeatures';
 import { toast } from 'sonner';
-import { humanizeExcursionType } from '@/lib/packages/package-types';
+import { humanizeExcursionType, normalizeExcursionTypeValue } from '@/lib/packages/package-types';
+import { useLocale, useNow, useTranslations } from 'next-intl';
 
 interface PaqueteCardProps {
   paquete: Paquete;
@@ -25,6 +26,9 @@ export default function PaqueteCard({
   basePath = '/excursion',
   badgeLabel,
 }: PaqueteCardProps) {
+  const locale = useLocale();
+  const now = useNow();
+  const p = useTranslations('public');
   const parsePromoDeadline = (value?: string | null) => {
     const normalized = String(value || '').trim();
     if (!normalized) return null;
@@ -36,7 +40,7 @@ export default function PaqueteCard({
     const parsed = parsePromoDeadline(value);
     if (!parsed) return '';
     return parsed
-      .toLocaleDateString('es-AR', {
+      .toLocaleDateString(locale === 'en' ? 'en-US' : 'es-AR', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -54,7 +58,7 @@ export default function PaqueteCard({
     if (!paquete.salidas || paquete.salidas.length === 0) return null;
     const salidasFuturas = paquete.salidas.filter((s) => {
       const fechaSalida = new Date(`${s.fecha}T00:00:00`);
-      return fechaSalida >= new Date();
+      return fechaSalida >= now;
     });
     if (salidasFuturas.length === 0) return paquete.salidas[0];
     return salidasFuturas.sort(
@@ -63,14 +67,20 @@ export default function PaqueteCard({
   };
 
   const primeraSalida = getPrimeraSalida();
-  const features = getPackageFeatures(paquete.incluye || [], 3);
+  const features = getPackageFeatures(paquete.incluye || [], 3).map((feature) => ({
+    ...feature, label: p(`features.${feature.priority}`),
+  }));
   const textoDestino =
     basePath === '/f1' && paquete.eventoLugar
       ? paquete.eventoLugar
       : paquete.destino || 'BAFT';
-  const badgeTexto = badgeLabel
-    ? badgeLabel
-    : humanizeExcursionType((Array.isArray(paquete.tipos) && paquete.tipos[0]) || paquete.tipo) || 'Excursión';
+  const type = normalizeExcursionTypeValue((Array.isArray(paquete.tipos) && paquete.tipos[0]) || paquete.tipo) || 'excursion';
+  const badgeTexto = badgeLabel || (p.has(`types.${type}`) ? p(`types.${type}`) : humanizeExcursionType(type));
+  const durationMatch = paquete.duracion?.trim().match(/^(\d+(?:[.,]\d+)?)\s*(horas?|h(?:s)?|d[ií]as?)$/i);
+  const durationLabel = durationMatch
+    ? p(/^d/i.test(durationMatch[2]) ? 'days' : 'hours', { count: Number(durationMatch[1].replace(',', '.')) })
+    : paquete.duracion;
+  const localizedHref = `/${locale}${basePath}/${paquete.slug}`;
   const imagenSrc =
     paquete.imagenTarjeta || paquete.imagenPrincipal || paquete.imagenCard || '/images/placeholder-package.jpg';
   const promoPrice = Number(paquete.precioDescuentoPrimerosCupos ?? 0);
@@ -81,17 +91,17 @@ export default function PaqueteCard({
     paquete.precio > 0 &&
     promoPrice < paquete.precio &&
     Boolean(promoDeadline) &&
-    Boolean(promoDeadlineDate && promoDeadlineDate.getTime() >= Date.now());
+    Boolean(promoDeadlineDate && promoDeadlineDate.getTime() >= now.getTime());
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const url = `${window.location.origin}${basePath}/${paquete.slug}`;
+    const url = `${window.location.origin}${localizedHref}`;
     if (navigator.share) {
       try {
         await navigator.share({
           title: paquete.titulo,
-          text: `Mirá esta excursión: ${paquete.titulo}`,
+          text: p('shareText', { title: paquete.titulo }),
           url,
         });
       } catch {
@@ -100,9 +110,9 @@ export default function PaqueteCard({
     } else {
       try {
         await navigator.clipboard.writeText(url);
-        toast.success('Enlace copiado al portapapeles');
+        toast.success(p('copyLink'));
       } catch {
-        toast.error('No se pudo copiar el enlace');
+        toast.error(p('copyLinkError'));
       }
     }
   };
@@ -136,7 +146,7 @@ export default function PaqueteCard({
       }}
       className="h-full"
     >
-      <Link href={`${basePath}/${paquete.slug}`} className="block h-full">
+      <Link href={localizedHref} className="block h-full">
         <Card className="group relative mx-auto flex h-full min-h-[340px] w-full max-w-sm flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-[#101828] py-0 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl aspect-[4/5]">
           <div className="absolute inset-0">
             <Image
@@ -165,8 +175,8 @@ export default function PaqueteCard({
                 type="button"
                 onClick={handleShare}
                 className="rounded-full bg-white/95 p-2 text-[#0f172a] shadow-lg transition-transform hover:scale-110 hover:bg-white md:p-3"
-                title="Compartir excursión"
-                aria-label="Compartir excursión"
+                title={p('shareExcursion')}
+                aria-label={p('shareExcursion')}
               >
                 <Share2 className="h-4 w-4 md:h-5 md:w-5" />
               </button>
@@ -212,7 +222,7 @@ export default function PaqueteCard({
               <div className="mt-2 flex items-center gap-2 text-gray-400">
                 <Clock className="h-3 w-3 shrink-0 text-white md:h-3.5 md:w-3.5" />
                 <span className="text-[10px] font-medium text-white md:text-sm">
-                  {paquete.duracion}
+                  {durationLabel}
                 </span>
               </div>
             </CardContent>
@@ -221,7 +231,7 @@ export default function PaqueteCard({
               <div>
                 {hasPromo ? (
                   <>
-                    <p className="text-[10px] text-gray-400 md:text-xs">Desde</p>
+                    <p className="text-[10px] text-gray-400 md:text-xs">{p('from')}</p>
                     <div className="mt-0.5 text-[10px] text-gray-400 md:text-xs">
                       <span className="mr-1 font-bold uppercase">{paquete.moneda || 'ARS'}</span>
                       <span className="line-through decoration-2">{`$${paquete.precio.toLocaleString('es-AR')}`}</span>
@@ -231,14 +241,14 @@ export default function PaqueteCard({
                       {`$${promoPrice.toLocaleString('es-AR')}`}
                     </p>
                     <p className="mt-1 text-[10px] leading-tight text-[#F6C000] md:text-xs">
-                      Hasta el {promoDeadline}
+                      {p('until')} {promoDeadline}
                     </p>
                   </>
                 ) : primeraSalida ? (
                   <>
                     <p className="text-[10px] text-gray-400 md:text-xs">
-                      Proxima salida:{' '}
-                      {new Date(`${primeraSalida.fecha}T00:00:00`).toLocaleDateString('es-AR', {
+                      {p('nextDeparture')}:{' '}
+                      {new Date(`${primeraSalida.fecha}T00:00:00`).toLocaleDateString(locale, {
                         day: 'numeric',
                         month: 'short',
                       })}
@@ -250,7 +260,7 @@ export default function PaqueteCard({
                 ) : (
                   <>
                     {paquete.mostrarDesde && (
-                      <p className="text-[10px] text-gray-400 md:text-xs">Desde</p>
+                      <p className="text-[10px] text-gray-400 md:text-xs">{p('from')}</p>
                     )}
                     <p className="font-heading text-xs font-bold text-white md:text-sm">
                       {paquete.moneda || 'ARS'} ${paquete.precio.toLocaleString('es-AR')}
@@ -262,7 +272,7 @@ export default function PaqueteCard({
                 size="sm"
                 className="shrink-0 bg-white font-semibold text-[#0f172a] transition-transform hover:translate-x-1 hover:bg-gray-100"
               >
-                <span className="hidden md:inline">Ver mas</span>
+                <span className="hidden md:inline">{p('viewMore')}</span>
                 <ArrowRight className="h-3 w-3 md:ml-1 md:h-4 md:w-4" />
               </Button>
             </CardFooter>
@@ -270,7 +280,7 @@ export default function PaqueteCard({
 
           {paquete.destacado && (
             <Badge className="absolute right-14 top-3 z-20 border border-white/10 bg-[rgba(2,6,23,0.82)] font-semibold text-white hover:bg-[rgba(2,6,23,0.82)]">
-              Destacado
+              {p('featured')}
             </Badge>
           )}
         </Card>

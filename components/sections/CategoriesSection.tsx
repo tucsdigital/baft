@@ -5,6 +5,7 @@ import { motion, Variants } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import CategoriaCard from '@/components/CategoriaCard';
 import { Categoria } from '@/types';
+import { useTranslations } from 'next-intl';
 
 interface CategoriesSectionProps {
   categorias: Categoria[];
@@ -17,6 +18,7 @@ export default function CategoriesSection({
   fadeInUpVariants,
   staggerFastVariants,
 }: CategoriesSectionProps) {
+  const p = useTranslations('public');
   const [showAllCategorias, setShowAllCategorias] = useState(false);
 
   return (
@@ -30,7 +32,7 @@ export default function CategoriesSection({
           variants={staggerFastVariants}
         >
           <motion.div className="inline-block mb-4" variants={fadeInUpVariants}>
-            <span className="badge-pluma pluma-underline">Destinos</span>
+            <span className="badge-pluma pluma-underline">{p('destinationsTitle')}</span>
           </motion.div>
           <motion.h2
             className="text-lg md:text-lg lg:text-lg font-bold leading-tight"
@@ -42,7 +44,7 @@ export default function CategoriesSection({
             className="text-base md:text-lg text-[#4B5563] leading-relaxed"
             variants={fadeInUpVariants}
           >
-            Explorá nuestros destinos destacados y encontrá el viaje perfecto para vos
+            {p('destinationsSubtitle')}
           </motion.p>
         </motion.div>
 
@@ -59,7 +61,7 @@ export default function CategoriesSection({
               transition={{ duration: 0.6 }}
             >
               <p className="text-base md:text-lg text-gray-400">
-                No hay destinos destacados disponibles
+                {p('noFeaturedDestinations')}
               </p>
             </motion.div>
           )}
@@ -81,7 +83,7 @@ export default function CategoriesSection({
                 transition={{ duration: 0.6 }}
               >
                 <p className="text-base md:text-lg text-gray-400">
-                  No hay destinos destacados disponibles
+                {p('noFeaturedDestinations')}
                 </p>
               </motion.div>
             )}
@@ -98,7 +100,7 @@ export default function CategoriesSection({
                 onClick={() => setShowAllCategorias(true)}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#D8E7F5] bg-white px-6 py-3 text-sm font-extrabold text-[#112B49] shadow-[0_12px_28px_rgba(17,43,73,0.1)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#B7D8EF] hover:bg-[#F8FCFF] hover:text-[#0B7FA5] hover:shadow-[0_16px_34px_rgba(17,43,73,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2BB8BF]/25 focus-visible:ring-offset-2 active:translate-y-0 active:bg-[#F2F9FD]"
               >
-                Ver todos los destinos ({categorias.length})
+                {p('viewAll')} {p('destinations').toLowerCase()} ({categorias.length})
                 <ArrowRight className="h-4 w-4 shrink-0" />
               </button>
             </motion.div>

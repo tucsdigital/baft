@@ -6,6 +6,8 @@ import { SITE_NAME, CONTACT_INFO, SITE_URL, SITE_DESCRIPTION } from '@/lib/const
 import SchemaOrg from '@/components/SchemaOrg';
 import PageTransition from '@/components/PageTransition';
 import { buildPageTitle, renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -140,9 +142,22 @@ export default function RootLayout({
     ['--sherpa-cream' as string]: siteConfig.branding.palette.cream,
   } as React.CSSProperties;
 
+  return <RootLayoutContent cssVars={cssVars}>{children}</RootLayoutContent>;
+}
+
+async function RootLayoutContent({
+  children,
+  cssVars,
+}: {
+  children: React.ReactNode;
+  cssVars: React.CSSProperties;
+}) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
     <html
-      lang="es"
+      lang={locale}
       className={`${sora.variable} ${plusJakarta.variable} ${inter.variable}`}
       data-scroll-behavior="smooth"
       style={cssVars}
@@ -166,22 +181,24 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body className="font-body antialiased">
-        <SchemaOrg />
-        <main id="main-content" className="relative z-0">
-          <PageTransition>{children}</PageTransition>
-        </main>
-        <Toaster 
-          position="top-right"
-          toastOptions={{
-            style: { 
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <SchemaOrg />
+          <main id="main-content" className="relative z-0">
+            <PageTransition>{children}</PageTransition>
+          </main>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                zIndex: 99999,
+              },
+              className: 'bg-white border border-gray-200 shadow-lg',
+            }}
+            style={{
               zIndex: 99999,
-            },
-            className: 'bg-white border border-gray-200 shadow-lg',
-          }}
-          style={{
-            zIndex: 99999,
-          }}
-        />
+            }}
+          />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

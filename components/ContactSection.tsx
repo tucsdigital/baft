@@ -6,6 +6,7 @@ import { MessageCircle, Phone, Radio, MapPin, Mail } from 'lucide-react';
 import ContactForm from '@/components/ContactForm';
 import { CONTACT_INFO, SOCIAL_MEDIA } from '@/lib/constants';
 import { renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 interface ContactSectionProps {
   showTitle?: boolean;
@@ -14,8 +15,10 @@ interface ContactSectionProps {
 }
 
 export default function ContactSection({ showTitle = true, paqueteTitulo, paqueteId }: ContactSectionProps) {
-  const content = siteConfig.content.contactForm;
-  const imageAlt = renderTemplate(content.image.altTemplate);
+  const t = useTranslations('public');
+  const h = useTranslations('home.contactForm');
+  const content = { ...siteConfig.content.contactForm, title: h('title'), subtitle: h('subtitle'), whatsappCta: h('whatsappCta') };
+  const imageAlt = h('imageAlt', { siteName: siteConfig.branding.siteName });
   const contact = siteConfig.company.contact;
   const addressLabel = contact.direccion || 'Patagonia, Argentina';
   const emailHref = contact.email ? `mailto:${contact.email}` : SOCIAL_MEDIA.email;
@@ -131,7 +134,7 @@ export default function ContactSection({ showTitle = true, paqueteTitulo, paquet
                 <div className="flex items-start gap-3">
                   <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Dirección</div>
+                    <div className="text-sm font-semibold text-gray-900">{t('address')}</div>
                     <div className="text-sm">{addressLabel}</div>
                   </div>
                 </div>
@@ -152,7 +155,7 @@ export default function ContactSection({ showTitle = true, paqueteTitulo, paquet
                 <div className="flex items-start gap-3">
                   <Mail className="h-5 w-5 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Email</div>
+                    <div className="text-sm font-semibold text-gray-900">{t('email')}</div>
                     <a className="text-sm hover:text-primary transition-colors" href={emailHref}>
                       {emailLabel}
                     </a>

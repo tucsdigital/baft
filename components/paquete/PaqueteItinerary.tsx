@@ -1,4 +1,5 @@
 import { sanitizePackageRichHtml } from '@/lib/packages/rich-text-sanitize';
+import { useTranslations } from 'next-intl';
 import type { PaqueteItineraryStep } from '@/types';
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export default function PaqueteItinerary({ steps, html, visible }: Props) {
+  const p = useTranslations('excursionPage');
   const normalizedSteps = (Array.isArray(steps) ? steps : [])
     .map((step) => ({
       id: String(step?.id ?? '').trim(),
@@ -23,8 +25,8 @@ export default function PaqueteItinerary({ steps, html, visible }: Props) {
   return (
     <section className="rounded-3xl border border-[#D4E6F7] bg-white p-5 shadow-[0_14px_34px_rgba(15,66,116,0.08)]">
       <div className="mb-4">
-        <h3 className="text-xl font-extrabold tracking-[-0.02em] text-[#0B2240]">Itinerario</h3>
-        <p className="mt-1 text-sm text-[#5A7898]">Consultá el programa completo de la excursión antes de reservar.</p>
+        <h3 className="text-xl font-extrabold tracking-[-0.02em] text-[#0B2240]">{p('itineraryTitle')}</h3>
+        <p className="mt-1 text-sm text-[#5A7898]">{p('itineraryDescription')}</p>
       </div>
 
       {normalizedSteps.length > 0 ? (

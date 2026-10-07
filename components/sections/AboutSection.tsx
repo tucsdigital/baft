@@ -3,6 +3,7 @@
 import { motion, Variants } from 'framer-motion';
 import Image from 'next/image';
 import { renderTemplate, siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 const BLUR_PLACEHOLDER =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect fill='%231e3a5f' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='14' fill='%2394a3b8'%3EFoto%3C/text%3E%3C/svg%3E";
@@ -20,8 +21,13 @@ export default function AboutSection({
   staggerFastVariants,
   staggerContainerVariants,
 }: AboutSectionProps) {
-  const about = siteConfig.content.about;
-  const imageAlt = renderTemplate(about.image.altTemplate);
+  const t = useTranslations('home.about');
+  const about = {
+    ...siteConfig.content.about,
+    badge: t('badge'), titlePrefix: t('titlePrefix'),
+    paragraphs: siteConfig.content.about.paragraphs.map((_, index) => t(`paragraphs.${index}`)),
+  };
+  const imageAlt = t('imageAlt', { siteName: siteConfig.branding.siteName });
   const renderParagraph = (value: string) => {
     const parts = value.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
     return parts.map((part, idx) => {

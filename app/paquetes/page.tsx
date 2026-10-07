@@ -1,4 +1,5 @@
 import { permanentRedirect } from 'next/navigation';
+import { getLocale } from 'next-intl/server';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export default async function PaquetesRedirectPage({
@@ -21,5 +22,6 @@ export default async function PaquetesRedirectPage({
     }
   }
 
-  permanentRedirect(params.toString() ? `/excursiones?${params.toString()}` : '/excursiones');
+  const locale = await getLocale();
+  permanentRedirect(params.toString() ? `/${locale}/excursiones?${params.toString()}` : `/${locale}/excursiones`);
 }

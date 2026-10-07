@@ -62,15 +62,16 @@ export async function finalizeWeTravelPaidCheckout(input: {
   const currency = String(intentData.currency || 'ars').toLowerCase();
   const amountTotal = Math.max(0, Number(intentData.amountTotal ?? 0) || 0);
   if (!packageId || !people || !amountTotal) throw new Error('El intento WeeTravel no tiene datos válidos.');
-  if (event.amountMinor !== null && event.amountMinor !== amountTotal) throw new Error('El importe de WeeTravel no coincide con el checkout.');
-  if (event.currency && event.currency !== currency) throw new Error('La moneda de WeeTravel no coincide con el checkout.');
+  if (event.amountMinor === null || event.amountMinor !== amountTotal) throw new Error('El importe de WeeTravel falta o no coincide con el checkout.');
+  if (!event.currency || event.currency !== currency) throw new Error('La moneda de WeeTravel falta o no coincide con el checkout.');
 
   const pkg = await getPaqueteById(packageId).catch(() => null);
   const finalTitle = packageTitle || pkg?.titulo || SITE_NAME;
   const customerEmail = event.customerEmail || String(intentData.customerEmail || '').trim();
   if (!customerEmail) throw new Error('El pago WeeTravel no trae email del cliente.');
   const customerName = event.customerName || String(intentData.customerName || '').trim();
-  const reservationId = `wt_${String(event.paymentId || event.bookingId || event.paymentLinkId || intentId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  // Booking and payment events for the same checkout must contend on the same document.
+  const reservationId = String(intentData.reservationId || `wt_${intentId}`);
   const reservationRef = doc(db, 'reservas', reservationId);
   const paymentId = event.paymentId || event.bookingId || event.paymentLinkId || intentId;
   const paymentRef = doc(collection(db, 'reservas', reservationId, 'payments'), paymentId);

@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { motion, Variants } from 'framer-motion';
 import { Award, CheckCircle, Sparkles, Shield, Heart, Smile } from 'lucide-react';
 import { siteConfig } from '@/lib/siteConfig';
+import { useTranslations } from 'next-intl';
 
 interface ValuesSectionProps {
   fadeInUpVariants: Variants;
@@ -20,8 +21,11 @@ export default function ValuesSection({
   staggerContainerVariants,
   scaleInVariants,
 }: ValuesSectionProps) {
-  const section = siteConfig.content.values;
-  const values = section.items ?? [];
+  const t = useTranslations('home.values');
+  const section = { badge: t('badge'), title: t('title', { siteName: siteConfig.branding.siteName }), subtitle: t('subtitle') };
+  const values = siteConfig.content.values.items.map((item, index) => ({
+    ...item, title: t(`items.${index}.title`), desc: t(`items.${index}.desc`),
+  }));
   const words = section.title.trim().split(/\s+/);
   const accentWord = words.length > 1 ? (words.pop() as string) : section.title;
   const prefix = words.length > 0 ? `${words.join(' ')} ` : '';

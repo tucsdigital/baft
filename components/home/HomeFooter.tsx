@@ -6,6 +6,26 @@ import { Clock, Instagram, Mail, MapPin, Phone, Radio } from "lucide-react";
 import { FaFacebook, FaInstagram } from "react-icons/fa";
 import { CONTACT_INFO, LEGAL_INFO, SITE_NAME, SOCIAL_MEDIA } from "@/lib/constants";
 import { isRemoteUrl, renderTemplate, siteConfig } from "@/lib/siteConfig";
+import { useLocale, useTranslations } from 'next-intl';
+
+const HOURS_EN: Array<[RegExp, string]> = [
+  [/\blunes\b/gi, 'Monday'],
+  [/\bmartes\b/gi, 'Tuesday'],
+  [/\bmi[eé]rcoles\b/gi, 'Wednesday'],
+  [/\bjueves\b/gi, 'Thursday'],
+  [/\bviernes\b/gi, 'Friday'],
+  [/\bs[aá]bados?\b/gi, 'Saturday'],
+  [/\bdomingos?\b/gi, 'Sunday'],
+  [/\bde\b/gi, 'from'],
+  [/\b(\d{1,2}(?::\d{2})?)\s*(?:hs|hrs|h)\b\.?/gi, '$1'],
+  [/\s+a\s+/g, ' to '],
+  [/\s+y\s+/g, ' and '],
+];
+
+function translateHours(value: string, locale: string) {
+  if (locale !== 'en' || !value) return value;
+  return HOURS_EN.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
+}
 
 const ThreadsIcon = ({ className }: { className?: string }) => (
   <svg
@@ -21,6 +41,11 @@ const ThreadsIcon = ({ className }: { className?: string }) => (
 );
 
 export default function HomeFooter() {
+  const t = useTranslations('common');
+  const p = useTranslations('public');
+  const f = useTranslations('footer');
+  const locale = useLocale();
+  const prefix = `/${locale}`;
   const logoSrc = "/images/logo_white.png";
   const logoAlt = renderTemplate(siteConfig.branding.logo.altTextTemplate || "{{siteName}} Logo");
   const telefonos = [CONTACT_INFO.telefono, CONTACT_INFO.telefonoSecundario].filter(Boolean).join(" / ");
@@ -41,43 +66,43 @@ export default function HomeFooter() {
               </div>
             </div>
             <p className="text-sm leading-snug text-white/82">
-              {renderTemplate(siteConfig.content.footer.taglineTemplate)}
+              {locale === 'en' ? f('tagline') : renderTemplate(siteConfig.content.footer.taglineTemplate)}
             </p>
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-white">Enlaces</h3>
+            <h3 className="mb-2 text-sm font-semibold text-white">{p('links')}</h3>
             <ul className="space-y-1.5 text-sm">
               <li>
-                <Link href="/" className="text-white/82 transition-colors hover:text-white">
-                  Inicio
+                <Link href={prefix} className="text-white/82 transition-colors hover:text-white">
+                  {t('home')}
                 </Link>
               </li>
               <li>
-                <Link href="/excursiones" className="text-white/82 transition-colors hover:text-white">
-                  Excursiones
+                <Link href={`${prefix}/excursiones`} className="text-white/82 transition-colors hover:text-white">
+                  {t('excursions')}
                 </Link>
               </li>
               <li>
-                <Link href="/#destinos" className="text-white/82 transition-colors hover:text-white">
-                  Destinos
+                <Link href={`${prefix}#destinos`} className="text-white/82 transition-colors hover:text-white">
+                  {t('destinations')}
                 </Link>
               </li>
               <li>
-                <Link href="/#servicios" className="text-white/82 transition-colors hover:text-white">
-                  Servicios
+                <Link href={`${prefix}#servicios`} className="text-white/82 transition-colors hover:text-white">
+                  {p('services')}
                 </Link>
               </li>
               <li>
-                <Link href="/terminos-condiciones" className="text-white/82 transition-colors hover:text-white">
-                  Términos y Condiciones
+                <Link href={`${prefix}/terminos-condiciones`} className="text-white/82 transition-colors hover:text-white">
+                  {p('terms')}
                 </Link>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-white">Contacto</h3>
+            <h3 className="mb-2 text-sm font-semibold text-white">{t('contact')}</h3>
             <ul className="space-y-1.5 text-sm">
               <li className="flex items-start space-x-2">
                 <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-white" />
@@ -85,7 +110,7 @@ export default function HomeFooter() {
               </li>
               <li className="flex items-center space-x-2">
                 <Clock className="h-4 w-4 flex-shrink-0 text-white" />
-                <span className="text-white/82">{CONTACT_INFO.horario}</span>
+                <span className="text-white/82">{translateHours(CONTACT_INFO.horario, locale)}</span>
               </li>
               <li className="flex items-center space-x-2">
                 <Phone className="h-4 w-4 flex-shrink-0 text-white" />
@@ -101,14 +126,14 @@ export default function HomeFooter() {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-white">Seguinos</h3>
+            <h3 className="mb-2 text-sm font-semibold text-white">{p('followUs')}</h3>
             <div className="flex flex-wrap gap-3">
               {SOCIAL_MEDIA.instagram && (
                 <a
                   href={SOCIAL_MEDIA.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Seguinos en Instagram"
+                  aria-label={`${p('followUs')} Instagram`}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E1306C] text-white shadow-[0_10px_24px_rgba(225,48,108,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#C13584]"
                 >
                   <Instagram className="h-4 w-4" aria-hidden="true" />
@@ -119,7 +144,7 @@ export default function HomeFooter() {
                   href={SOCIAL_MEDIA.facebook}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Seguinos en Facebook"
+                  aria-label={`${p('followUs')} Facebook`}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1877F2] text-white shadow-[0_10px_24px_rgba(24,119,242,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#0F67DB]"
                 >
                   <FaFacebook className="h-4 w-4" aria-hidden="true" />
@@ -130,7 +155,7 @@ export default function HomeFooter() {
                   href={SOCIAL_MEDIA.threads}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Seguinos en Threads"
+                  aria-label={`${p('followUs')} Threads`}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111827] text-white shadow-[0_10px_24px_rgba(15,23,42,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-black"
                 >
                   <ThreadsIcon className="h-4 w-4" />
@@ -141,7 +166,7 @@ export default function HomeFooter() {
                   href={SOCIAL_MEDIA.whatsapp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Contactanos por WhatsApp"
+                  aria-label={p('contactWhatsApp')}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_10px_24px_rgba(37,211,102,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1EBE5D]"
                 >
                   <Phone className="h-4 w-4" aria-hidden="true" />
@@ -152,7 +177,7 @@ export default function HomeFooter() {
                   href={SOCIAL_MEDIA.whatsappChannel}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Canal de WhatsApp"
+                  aria-label={p('contactChannel')}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#128C7E] text-white shadow-[0_10px_24px_rgba(18,140,126,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#0F766E]"
                 >
                   <Radio className="h-4 w-4" aria-hidden="true" />
@@ -161,7 +186,7 @@ export default function HomeFooter() {
               {SOCIAL_MEDIA.email && (
                 <a
                   href={SOCIAL_MEDIA.email}
-                  aria-label="Enviar email"
+                  aria-label={p('sendEmail')}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#0f172a] shadow-[0_10px_24px_rgba(255,255,255,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-gray-100"
                 >
                   <Mail className="h-4 w-4" aria-hidden="true" />
@@ -174,20 +199,20 @@ export default function HomeFooter() {
         <div className="mt-4 border-t border-white/15 pt-4">
           <div className="flex flex-col items-center justify-between gap-2 md:flex-row">
             <p className="text-center text-sm text-white/82 md:text-left">
-              &copy; {new Date().getFullYear()} {SITE_NAME}. Todos los derechos reservados.
+              &copy; {new Date().getFullYear()} {SITE_NAME}. {p('allRightsReserved')}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
-              <Link href="/terminos-condiciones" className="text-white/82 transition-colors hover:text-white">
-                Términos y Condiciones
+              <Link href={`${prefix}/terminos-condiciones`} className="text-white/82 transition-colors hover:text-white">
+                {p('terms')}
               </Link>
               <span className="text-white/45">|</span>
-              <span className="text-white/82">Legajo RNAV N° {LEGAL_INFO.legajoRnav}</span>
+              <span className="text-white/82">{f('legajo', { number: LEGAL_INFO.legajoRnav })}</span>
             </div>
           </div>
           <div className="mt-2 border-t border-white/15 pt-2">
             <div className="flex flex-col items-center justify-center gap-1.5 md:flex-row">
               <p className="text-center text-sm text-white/82">
-                Desarrollado por{" "}
+                {p('developedBy')} {" "}
                 <a
                   href={developer.url}
                   target="_blank"
@@ -202,7 +227,7 @@ export default function HomeFooter() {
                   href={developer.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Seguir a ${developer.name} en Instagram`}
+                  aria-label={f('followDeveloper', { name: developer.name })}
                   className="rounded-full border border-white/20 p-2 text-white/75 transition-colors hover:border-secondary hover:text-secondary"
                 >
                   <FaInstagram className="h-4 w-4" aria-hidden="true" />

@@ -11,6 +11,9 @@ import {
 } from '@/lib/packages/people-categories';
 import { computeReservationPricing, getPackageAddonExtraSelections, getPackageAddonOptions } from '@/lib/packages/resolve-departure';
 import { formatIsoDateEs, getFirstBookableDateIso, getMinLeadHours, isDateBookable } from '@/lib/packages/booking-rules';
+import { getLocale, getTranslations } from 'next-intl/server';
+import type { AppLocale } from '@/i18n/routing';
+import { localizePaquete } from '@/lib/i18n/cms-content';
 
 /** Sin caché: datos de experiencia y reserva siempre actualizados */
 export const revalidate = 0;
@@ -23,17 +26,20 @@ export default async function CheckoutPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
+  const locale = (await getLocale()) as AppLocale;
+  const t = await getTranslations('checkout');
   const slug = params.slug?.trim();
   const dateParam = params.date?.trim();
   const paxParam = params.pax?.trim();
   const addonsParam = params.addons?.trim();
-  if (params.cart === '1') redirect('/excursiones');
-  if (!slug) redirect('/');
+  if (params.cart === '1') redirect(`/${locale}/excursiones`);
+  if (!slug) redirect(`/${locale}`);
 
-  const paquete = await getPaqueteBySlug(slug);
-  if (!paquete) {
-    redirect('/');
+  const paqueteBase = await getPaqueteBySlug(slug);
+  if (!paqueteBase) {
+    redirect(`/${locale}`);
   }
+  const paquete = await localizePaquete(paqueteBase, locale);
 
   // Mapeo temporal de paquete a formato Experience para compatibilidad con CheckoutClient
   const experience = {
@@ -77,7 +83,7 @@ export default async function CheckoutPage({
   const hasSpecificDates = bookingData?.hasSpecificDates ?? true;
   const isNoDate = !dateParam || dateParam === 'sin-fecha';
   if (hasSpecificDates && isNoDate) {
-    redirect(`/excursion/${slug}`);
+    redirect(`/${locale}/excursion/${slug}`);
   }
   if (!hasSpecificDates && !isNoDate) {
     // Si no hay fechas específicas, ignorar date o normalizar a sin-fecha
@@ -85,7 +91,7 @@ export default async function CheckoutPage({
   const date = isNoDate ? 'sin-fecha' : dateParam;
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (date !== 'sin-fecha' && !dateRegex.test(date)) {
-    redirect('/');
+    redirect(`/${locale}`);
   }
   // La anticipación mínima no redirige: el checkout muestra el aviso y bloquea el pago.
   // (Si date=sin-fecha llega hasta acá, el flujo es "a coordinar" y no aplica el plazo.)
@@ -118,13 +124,13 @@ export default async function CheckoutPage({
   pax = clampPeopleBreakdownToMax({ breakdown: pax, categories: categoriesForCheckout, maxPeoplePerBooking });
   const safePeople = Math.max(1, Math.min(maxPeoplePerBooking, getPeopleBreakdownTotal(pax)));
   if (paxInvalid) {
-    checkoutError = 'La selección de pasajeros no es válida. Volvé a intentarlo.';
+    checkoutError = t('invalidPassengerSelection');
     pax = normalizePeopleBreakdown({ breakdown: null, categories: categoriesForCheckout });
   }
   const minLeadHours = getMinLeadHours((paquete as any)?.bookingConfig);
   if (date !== 'sin-fecha' && minLeadHours > 0 && !isDateBookable(date, minLeadHours)) {
     const firstBookableDate = formatIsoDateEs(getFirstBookableDateIso(minLeadHours));
-    checkoutError = `La salida elegida ya no cumple la anticipación mínima de ${minLeadHours} hs. Volvé a la excursión y elegí una fecha a partir del ${firstBookableDate}.`;
+    checkoutError = t('leadTimeError', { hours: minLeadHours, date: firstBookableDate });
   }
 
   // Adicionales elegidos en el modal (ids separados por coma). Se validan contra el catálogo.

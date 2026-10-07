@@ -10,6 +10,7 @@
 
 # next.js
 /.next/
+/.swc-cache/
 /out/
 
 # production
@@ -20,6 +21,7 @@
 *.pem
 
 # debug
+.playwright-wetravel-results/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

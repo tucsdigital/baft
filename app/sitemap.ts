@@ -3,34 +3,21 @@ import { collection, getDocs, query, orderBy as firestoreOrderBy } from 'firebas
 import { db } from '@/lib/firebase';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://viaggiotur.vercel.app';
+const locales = ['es', 'en'] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const routes: MetadataRoute.Sitemap = [
-    {
-      url: siteUrl,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 1,
-    },
-    {
-      url: `${siteUrl}/excursiones`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    {
-      url: `${siteUrl}/contacto`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    {
-      url: `${siteUrl}/terminos-condiciones`,
-      lastModified: new Date(),
-      changeFrequency: 'yearly',
-      priority: 0.5,
-    },
+  const baseRoutes = [
+    { path: '', changeFrequency: 'daily' as const, priority: 1 },
+    { path: '/excursiones', changeFrequency: 'daily' as const, priority: 0.9 },
+    { path: '/contacto', changeFrequency: 'monthly' as const, priority: 0.8 },
+    { path: '/terminos-condiciones', changeFrequency: 'yearly' as const, priority: 0.5 },
   ];
+  const routes: MetadataRoute.Sitemap = locales.flatMap((locale) => baseRoutes.map((route) => ({
+    url: `${siteUrl}/${locale}${route.path}`,
+    lastModified: new Date(),
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  })));
 
   try {
     // Obtener categorías
@@ -40,14 +27,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     
     categoriasSnapshot.docs.forEach((doc) => {
       const categoria = doc.data();
-      if (categoria.activa && categoria.slug) {
-        routes.push({
-          url: `${siteUrl}/destinos/${categoria.slug}`,
-          lastModified: categoria.fechaCreacion?.toDate() || new Date(),
-          changeFrequency: 'weekly',
-          priority: 0.8,
-        });
-      }
+      if (categoria.activa && categoria.slug) locales.forEach((locale) => routes.push({
+        url: `${siteUrl}/${locale}/destinos/${categoria.slug}`,
+        lastModified: categoria.fechaCreacion?.toDate() || new Date(),
+        changeFrequency: 'weekly',
+        priority: 0.8,
+      }));
     });
 
     // Obtener paquetes
@@ -57,14 +42,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     
     paquetesSnapshot.docs.forEach((doc) => {
       const paquete = doc.data();
-      if (paquete.visible && paquete.slug) {
-        routes.push({
-          url: `${siteUrl}/excursion/${paquete.slug}`,
-          lastModified: paquete.fechaCreacion?.toDate() || new Date(),
-          changeFrequency: 'weekly',
-          priority: 0.7,
-        });
-      }
+      if (paquete.visible && paquete.slug) locales.forEach((locale) => routes.push({
+        url: `${siteUrl}/${locale}/excursion/${paquete.slug}`,
+        lastModified: paquete.fechaCreacion?.toDate() || new Date(),
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      }));
     });
   } catch (error) {
     console.error('Error generating sitemap:', error);
