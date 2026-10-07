@@ -403,11 +403,7 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
     }
     setError(null);
     setIsLoading(true);
-    // Open the tab synchronously with the click so browsers do not block it.
-    let paymentTab: Window | null = null;
-    if (method === 'wetravel') {
-      try { paymentTab = window.open('about:blank', '_blank'); } catch { paymentTab = null; }
-    }
+    if (method === 'wetravel') setWeTravelModalOpen(true);
 
     try {
       const baseUrl = getSiteUrl();
@@ -469,16 +465,11 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
         if (!session || data.provider !== 'wetravel') throw new Error(t('paymentUrlError'));
         setWeTravelSession(session);
         try { sessionStorage.setItem(trackingStorageKey, JSON.stringify(session)); } catch { /* Keep tracking in memory. */ }
-        if (paymentTab && !paymentTab.closed) {
-          try { paymentTab.opener = null; } catch { /* Best effort. */ }
-          paymentTab.location.href = session.url;
-        }
         setWeTravelModalOpen(true);
       } else {
         window.location.href = data.url;
       }
     } catch (err) {
-      try { paymentTab?.close(); } catch { /* Ignore. */ }
       setError(err instanceof Error ? err.message : 'No se pudo iniciar el pago.');
     } finally {
       setIsLoading(false);
@@ -489,13 +480,15 @@ export default function CheckoutClient({ experience, date, people, pax, pricing,
 
   return (
     <div className="min-h-screen bg-[#F5FAFF] px-4 py-10 md:px-6 lg:px-8">
-      {weTravelSession ? (
+      {weTravelSession || weTravelModalOpen ? (
         <WeTravelPaymentModal
-          key={weTravelSession.intentId}
           open={weTravelModalOpen}
           onOpenChange={setWeTravelModalOpen}
-          intentId={weTravelSession.intentId}
-          paymentUrl={weTravelSession.url}
+          intentId={weTravelSession?.intentId ?? ''}
+          paymentUrl={weTravelSession?.url ?? ''}
+          creating={isLoading}
+          error={weTravelSession ? null : error}
+          onRetry={() => void createPaymentPreference('wetravel')}
           onBack={() => {
             try { sessionStorage.removeItem(trackingStorageKey); } catch { /* Storage is optional. */ }
             setWeTravelModalOpen(false);

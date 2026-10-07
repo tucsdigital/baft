@@ -1,7 +1,17 @@
 {
   "weTravelModal": {
+    "preparingTitle": "Preparando tu pago seguro",
+    "preparingDescription": "Estamos reservando tu lugar. Solo toma unos segundos.",
+    "readyTitle": "Tu pago está listo",
+    "readyDescription": "Revisá que todo esté bien y continuá en WeTravel para completar el pago de forma segura.",
+    "errorTitle": "No pudimos iniciar el pago",
+    "errorDescription": "Ocurrió un problema al preparar tu pago. No se realizó ningún cargo.",
+    "payNow": "Pagar ahora",
+    "secureNote": "Se abrirá WeTravel en una pestaña segura.",
+    "reopenPayment": "Reabrir pestaña de pago",
+    "retry": "Reintentar",
     "pendingTitle": "Completá tu pago en WeTravel",
-    "pendingDescription": "Abrimos WeTravel en una pestaña nueva. Cuando termines, volvé acá: lo detectamos automáticamente.",
+    "pendingDescription": "Cuando termines en la pestaña de WeTravel, volvé acá: lo detectamos automáticamente.",
     "processingTitle": "Pago recibido",
     "processingDescription": "Estamos confirmando tu reserva. Esto toma unos segundos, no cierres esta ventana.",
     "confirmedTitle": "¡Pago confirmado!",
