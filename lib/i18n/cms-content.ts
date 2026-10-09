@@ -7,7 +7,10 @@ import { sanitizePackageRichHtml } from '@/lib/packages/rich-text-sanitize';
 export async function localizePaquete(paquete: Paquete, locale: 'es' | 'en'): Promise<Paquete> {
   if (locale === 'es') return paquete;
   const id = paquete.id || paquete.slug;
-  const [titulo, descripcion, descripcionCorta, descripcionLarga, itinerario, incluye, noIncluye, destino, duracion, condiciones] = await Promise.all([
+  const bookingConfig = paquete.bookingConfig as (Record<string, any> | undefined);
+  const rawCategories = Array.isArray(bookingConfig?.peopleCategories) ? bookingConfig!.peopleCategories : null;
+
+  const [titulo, descripcion, descripcionCorta, descripcionLarga, itinerario, incluye, noIncluye, destino, duracion, condiciones, itinerarioSteps, eventoLugar, peopleCategories] = await Promise.all([
     translatedField('paquetes', id, 'titulo', paquete.titulo, locale),
     translatedField('paquetes', id, 'descripcion', paquete.descripcion, locale, true),
     translatedField('paquetes', id, 'descripcionCorta', paquete.descripcionCorta, locale),
@@ -17,21 +20,20 @@ export async function localizePaquete(paquete: Paquete, locale: 'es' | 'en'): Pr
     Promise.all((paquete.noIncluye || []).map((value, index) => translatedField('paquetes', id, `noIncluye.${index}`, value, locale))),
     translatedField('paquetes', id, 'destino', paquete.destino, locale),
     translatedField('paquetes', id, 'duracion', paquete.duracion, locale),
-    Promise.all((paquete.condiciones || []).map(async (condition, index) => ({
-      titulo: await translatedField('paquetes', id, `condiciones.${index}.titulo`, condition.titulo, locale),
-      texto: await translatedField('paquetes', id, `condiciones.${index}.texto`, condition.texto, locale, true),
-    }))),
-  ]);
-
-  const itinerarioSteps = await Promise.all((paquete.itinerarioSteps || []).map(async (step, index) => ({
-    ...step,
-    titulo: await translatedField('paquetes', id, `itinerarioSteps.${index}.titulo`, step.titulo, locale),
-    descripcion: sanitizePackageRichHtml(await translatedField('paquetes', id, `itinerarioSteps.${index}.descripcion`, step.descripcion, locale, true)),
-  })));
-
-  const bookingConfig = paquete.bookingConfig as (Record<string, any> | undefined);
-  const rawCategories = Array.isArray(bookingConfig?.peopleCategories) ? bookingConfig!.peopleCategories : null;
-  const [eventoLugar, peopleCategories] = await Promise.all([
+    Promise.all((paquete.condiciones || []).map(async (condition, index) => {
+      const [titulo, texto] = await Promise.all([
+        translatedField('paquetes', id, `condiciones.${index}.titulo`, condition.titulo, locale),
+        translatedField('paquetes', id, `condiciones.${index}.texto`, condition.texto, locale, true),
+      ]);
+      return { titulo, texto };
+    })),
+    Promise.all((paquete.itinerarioSteps || []).map(async (step, index) => {
+      const [titulo, descripcion] = await Promise.all([
+        translatedField('paquetes', id, `itinerarioSteps.${index}.titulo`, step.titulo, locale),
+        translatedField('paquetes', id, `itinerarioSteps.${index}.descripcion`, step.descripcion, locale, true),
+      ]);
+      return { ...step, titulo, descripcion: sanitizePackageRichHtml(descripcion) };
+    })),
     translatedField('paquetes', id, 'eventoLugar', paquete.eventoLugar, locale),
     rawCategories
       ? Promise.all(rawCategories.map(async (category: any, index: number) => ({
@@ -61,19 +63,21 @@ export async function localizePaquete(paquete: Paquete, locale: 'es' | 'en'): Pr
 
 export async function localizeCategoria(categoria: Categoria, locale: 'es' | 'en'): Promise<Categoria> {
   if (locale === 'es') return categoria;
-  return {
-    ...categoria,
-    nombre: await translatedField('categorias', categoria.id || categoria.slug, 'nombre', categoria.nombre, locale),
-    descripcion: await translatedField('categorias', categoria.id || categoria.slug, 'descripcion', categoria.descripcion, locale, true),
-  };
+  const id = categoria.id || categoria.slug;
+  const [nombre, descripcion] = await Promise.all([
+    translatedField('categorias', id, 'nombre', categoria.nombre, locale),
+    translatedField('categorias', id, 'descripcion', categoria.descripcion, locale, true),
+  ]);
+  return { ...categoria, nombre, descripcion };
 }
 
 export async function localizeBlogPost(post: BlogPost, locale: 'es' | 'en'): Promise<BlogPost> {
   if (locale === 'es') return post;
-  return {
-    ...post,
-    titulo: await translatedField('blog', post.id || post.slug, 'titulo', post.titulo, locale),
-    extracto: await translatedField('blog', post.id || post.slug, 'extracto', post.extracto, locale),
-    contenido: await translatedField('blog', post.id || post.slug, 'contenido', post.contenido, locale, true),
-  };
+  const id = post.id || post.slug;
+  const [titulo, extracto, contenido] = await Promise.all([
+    translatedField('blog', id, 'titulo', post.titulo, locale),
+    translatedField('blog', id, 'extracto', post.extracto, locale),
+    translatedField('blog', id, 'contenido', post.contenido, locale, true),
+  ]);
+  return { ...post, titulo, extracto, contenido };
 }
