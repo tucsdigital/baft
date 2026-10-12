@@ -7,6 +7,7 @@ import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
 import { collection, doc, getDoc, getDocs, limit, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { getPaqueteById } from '@/lib/paquetes';
 import { createReserva } from '@/lib/reservas';
+import { guardVendor } from '@/lib/vendor-guard';
 import { getStockDisponible, registrarMovimientoStock } from '@/lib/stock';
 import { computeCommission, nextPayoutStatusForReservationStatus } from '@/lib/referrals';
 import { getVendorById } from '@/lib/vendors';
@@ -85,6 +86,65 @@ async function getVendorForUser(auth: Auth, request: Request) {
   return { id: docSnap.id, name: String(data.name ?? email) };
 }
 
+function toIso(value: any): string | null {
+  if (!value) return null;
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (typeof value === 'string') return value;
+  return null;
+}
+
+/** Ventas asociadas al vendedor (manuales y automáticas), sin depender de índices ni reglas. */
+export async function GET(request: Request) {
+  const ctx = await guardVendor(request);
+  if (ctx instanceof NextResponse) return ctx;
+  const { db: adb, vendorId } = ctx;
+  try {
+    const linksSnap = await adb.collection('referralLinks').where('vendorId', '==', vendorId).get();
+    const codes = Array.from(new Set(linksSnap.docs.map((d) => String((d.data() as any).code ?? '')).filter(Boolean)));
+
+    const byId = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    const own = await adb.collection('reservas').where('referredBy.vendorId', '==', vendorId).get();
+    own.docs.forEach((d) => byId.set(d.id, d));
+    for (let i = 0; i < codes.length; i += 30) {
+      const chunk = codes.slice(i, i + 30);
+      const snap = await adb.collection('reservas').where('referredBy.code', 'in', chunk).get();
+      snap.docs.forEach((d) => {
+        const rb = (d.data() as any).referredBy;
+        if (!rb?.vendorId || rb.vendorId === vendorId) byId.set(d.id, d);
+      });
+    }
+
+    const reservations = Array.from(byId.values())
+      .map((d) => {
+        const r = d.data() as any;
+        const rb = r.referredBy ?? {};
+        const manual = rb.channel === 'manual' || r.createdByAdmin === true || r.paymentMethod === 'admin';
+        return {
+          id: d.id,
+          reservationCode: r.reservationCode ?? null,
+          createdAt: toIso(r.createdAt),
+          date: r.date ?? null,
+          experienceTitle: String(r.packageTitle ?? r.experienceTitle ?? ''),
+          customerName: String(r.customerName ?? ''),
+          amountTotal: Number(r.amountTotal) || 0,
+          currency: String(r.currency ?? 'ars'),
+          status: String(r.status ?? ''),
+          source: manual ? 'manual' : 'online',
+          referredBy: {
+            code: rb.code ?? null,
+            commissionAmount: Number(rb.commissionAmount) || 0,
+            commissionCurrency: rb.commissionCurrency ?? r.currency ?? null,
+            payoutStatus: rb.payoutStatus ?? 'pending',
+          },
+        };
+      })
+      .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+
+    return NextResponse.json({ ok: true, reservations });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'No se pudieron cargar las reservas' }, { status: 500 });
+  }
+}
 export async function POST(request: Request) {
   if (!adminAuth) {
     return NextResponse.json(

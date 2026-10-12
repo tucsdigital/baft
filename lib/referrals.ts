@@ -30,3 +30,44 @@ export function nextPayoutStatusForReservationStatus(status: Reservation['status
   if (status === 'cancelled') return 'cancelled';
   return 'pending';
 }
+
+/**
+ * Arma `referredBy` para ventas automáticas (checkout online) a partir del código
+ * del intento de pago. No lanza: si el código no existe o el vendedor está
+ * inactivo devuelve `undefined` y la venta se registra igual, sin vendedor.
+ */
+export async function buildReferredByFromCode(params: {
+  code?: string | null;
+  pkg?: { bookingConfig?: { referralCommission?: { type: 'percent' | 'fixed'; value: number; currency: 'ars' | 'brl' | 'usd' } | null } } | null;
+  amountTotal: number;
+  people: number;
+  status: Reservation['status'];
+}) {
+  const code = String(params.code ?? '').trim();
+  if (!code) return undefined;
+  try {
+    const resolved = await resolveReferralFromCode(code);
+    if (!resolved) return undefined;
+    const override = params.pkg?.bookingConfig?.referralCommission;
+    const comm = computeCommission({
+      amountTotal: params.amountTotal,
+      people: params.people,
+      vendor: resolved.vendor,
+      commissionOverride: override ? { type: override.type, value: override.value, currency: override.currency } : undefined,
+    });
+    return {
+      vendorId: resolved.vendor.id,
+      vendorName: resolved.vendor.name,
+      code: resolved.code,
+      channel: 'link' as const,
+      commissionType: comm.type,
+      commissionValue: comm.value,
+      commissionCurrency: comm.currency,
+      commissionAmount: comm.commissionAmount,
+      payoutStatus: nextPayoutStatusForReservationStatus(params.status),
+    };
+  } catch (error) {
+    console.error('[referrals] No se pudo resolver el referido', error);
+    return undefined;
+  }
+}

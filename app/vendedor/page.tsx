@@ -3,42 +3,42 @@
 import VendorProtectedRoute from '@/components/vendor/VendorProtectedRoute';
 import VendorLayout from '@/components/vendor/VendorLayout';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, where, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { toast } from 'sonner';
+import { fetchVendorReservations, type VendorReservationRow } from '@/lib/vendor-client';
 import { useAuth } from '@/hooks/useAuth';
-import type { Reservation } from '@/components/landing-reserva/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 
 export default function VendorDashboardPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [reservas, setReservas] = useState<Reservation[]>([]);
+  const [reservas, setReservas] = useState<VendorReservationRow[]>([]);
   const [stats, setStats] = useState({ sales: 0, commissions: 0 });
 
   useEffect(() => {
-    const load = async () => {
-      if (!user?.email) return;
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
       setLoading(true);
       try {
-        const vq = query(collection(db, 'vendors'), where('email', '==', user.email), limit(1));
-        const vs = await getDocs(vq);
-        const v = vs.docs[0];
-        if (!v) return;
-        const rq = query(collection(db, 'reservas'), where('referredBy.vendorId', '==', v.id), orderBy('createdAt', 'desc'), limit(20));
-        const rs = await getDocs(rq);
-        const list = rs.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Reservation[];
-        setReservas(list);
-        const sales = list.reduce((acc, r) => acc + (r.amountTotal || 0), 0);
-        const commissions = list.reduce((acc, r) => acc + (r.referredBy?.commissionAmount || 0), 0);
-        setStats({ sales, commissions });
+        const all = await fetchVendorReservations(user);
+        if (cancelled) return;
+        const valid = all.filter((r) => r.status !== 'cancelled');
+        setStats({
+          sales: valid.reduce((acc, r) => acc + (r.amountTotal || 0), 0),
+          commissions: valid.reduce((acc, r) => acc + (r.referredBy.commissionAmount || 0), 0),
+        });
+        setReservas(all.slice(0, 20));
+      } catch (e: any) {
+        if (!cancelled) toast.error(e.message || 'No se pudieron cargar las reservas');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    load();
   }, [user]);
-
   return (
     <VendorProtectedRoute>
       <VendorLayout>
@@ -112,11 +112,11 @@ export default function VendorDashboardPage() {
                       <tbody>
                         {reservas.map(r => (
                           <tr key={r.id} className="border-t border-gray-100">
-                            <td className="px-4 py-3">{new Date((r.createdAt as any)?.seconds ? (r.createdAt as any).seconds * 1000 : Date.now()).toLocaleDateString()}</td>
+                            <td className="px-4 py-3">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-'}</td>
                             <td className="px-4 py-3">{r.experienceTitle}</td>
                             <td className="px-4 py-3">{r.customerName}</td>
                             <td className="px-4 py-3">{(r.amountTotal/100).toLocaleString()} {r.currency?.toUpperCase?.()}</td>
-                            <td className="px-4 py-3">{r.referredBy ? (r.referredBy.commissionAmount/100).toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3">{(r.referredBy.commissionAmount/100).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>

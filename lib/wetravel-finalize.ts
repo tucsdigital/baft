@@ -21,6 +21,7 @@ import { getFromEmail } from '@/lib/resend';
 import { normalizeDigits, normalizeEmail, prepareNextReservationCodeInTransaction } from '@/lib/reservas/code';
 import { buildQueuedEmailDelivery } from '@/lib/sales/status';
 import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
+import { buildReferredByFromCode } from '@/lib/referrals';
 import { resolveDepartureConfig } from '@/lib/packages/resolve-departure';
 import type { WeTravelNormalizedEvent } from '@/lib/wetravel-events';
 
@@ -86,6 +87,13 @@ export async function finalizeWeTravelPaidCheckout(input: {
   const baseCapacity = pkg ? resolveDepartureConfig(pkg, date).baseCapacity : 0;
   const selectedExtras = selectedExtrasSnapshot(intentData.selectedExtras);
   const from = getFromEmail(true);
+  const referredBy = await buildReferredByFromCode({
+    code: intentData.referral?.code,
+    pkg,
+    amountTotal,
+    people,
+    status: 'reserved',
+  });
   const replyTo = process.env.SUPPORT_EMAIL || getFromEmail(false);
   const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
 
@@ -180,6 +188,7 @@ export async function finalizeWeTravelPaidCheckout(input: {
       experienceSnapshot: { id: packageId, slug: packageSlug, title: finalTitle },
       statusHistory: [{ status: 'reserved', actor: 'system', note: `Pago confirmado por WeeTravel (ID: ${paymentId})`, createdAt: now }],
       paidAt: now, voucherSent: false, voucherSentAt: null,
+      ...(referredBy ? { referredBy } : {}),
       voucherScheduledAt: shouldQueueVoucher ? nextVoucherAt : null, emailDelivery,
       createdAt: now, updatedAt: now,
     });

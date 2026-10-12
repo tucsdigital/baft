@@ -24,9 +24,10 @@ import type {
   ReservationStatus,
   ReservationTravelerDetails,
 } from '@/components/landing-reserva/types';
-import type { Vendor, ReferralLink } from '@/types/vendor';
+import { fetchAdminVendorLinks, type AdminVendorLink } from '@/lib/admin-vendors-client';
+import VendorCombobox from '@/components/admin/VendorCombobox';
 import type { DepartureSeat, Paquete, SeatLayoutTemplate } from '@/types';
-import { getVendors, getReferralLinksByVendor, getVendorByEmail } from '@/lib/vendors';
+import { getVendorByEmail } from '@/lib/vendors';
 import { getAllPaquetesAdmin } from '@/lib/paquetes';
 import { NationalitySelect } from '@/components/ui/nationality-select';
 import { PhoneWithPrefixInput } from '@/components/ui/phone-with-prefix-input';
@@ -172,9 +173,8 @@ export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSel
   const [stockInfo, setStockInfo] = useState<{ baseCapacity: number; available: number } | null>(null);
   const [stockLoading, setStockLoading] = useState(false);
   const [allowOverbook, setAllowOverbook] = useState(false);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorId, setVendorId] = useState<string>('');
-  const [referralLinks, setReferralLinks] = useState<ReferralLink[]>([]);
+  const [referralLinks, setReferralLinks] = useState<AdminVendorLink[]>([]);
   const [selectedReferralCode, setSelectedReferralCode] = useState<string>('');
   const [manualReferralCode, setManualReferralCode] = useState<string>('');
   const [seatDialogOpen, setSeatDialogOpen] = useState(false);
@@ -214,24 +214,7 @@ export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSel
   }, [selectedPackageId, date]);
 
   useEffect(() => {
-    if (hideVendorSelect) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const list = await getVendors({ activeOnly: true, limit: 200 });
-        if (!cancelled) setVendors(list);
-      } catch {
-        // ignore
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (hideReferral) return;
+    if (hideReferral || hideVendorSelect) return;
     let cancelled = false;
     const loadLinks = async () => {
       if (!vendorId) {
@@ -239,7 +222,7 @@ export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSel
         return;
       }
       try {
-        const links = await getReferralLinksByVendor(vendorId);
+        const links = await fetchAdminVendorLinks(vendorId);
         if (!cancelled) setReferralLinks(links);
       } catch {
         setReferralLinks([]);
@@ -1128,26 +1111,14 @@ export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSel
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1">
-                  <Select
-                    value={vendorId || 'none'}
-                    onValueChange={(value) => {
-                      setVendorId(value === 'none' ? '' : value);
+                  <VendorCombobox
+                    value={vendorId}
+                    onChange={(id) => {
+                      setVendorId(id);
                       setSelectedReferralCode('');
                       setManualReferralCode('');
                     }}
-                  >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Seleccioná un vendedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                      <SelectItem value="none">Sin vendedor</SelectItem>
-                          {vendors.map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
-                              {v.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  />
                     </div>
                     <div className="space-y-1">
                       <Select

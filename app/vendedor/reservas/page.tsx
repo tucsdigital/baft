@@ -3,10 +3,9 @@
 import VendorProtectedRoute from '@/components/vendor/VendorProtectedRoute';
 import VendorLayout from '@/components/vendor/VendorLayout';
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { toast } from 'sonner';
+import { fetchVendorReservations, type VendorReservationRow } from '@/lib/vendor-client';
 import { useAuth } from '@/hooks/useAuth';
-import type { Reservation } from '@/components/landing-reserva/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,39 +16,40 @@ import { Loader2, Search } from 'lucide-react';
 export default function VendorReservasPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [reservas, setReservas] = useState<Reservation[]>([]);
+  const [reservas, setReservas] = useState<VendorReservationRow[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'accrued' | 'paid' | 'cancelled'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'online'>('all');
 
   useEffect(() => {
-    const load = async () => {
-      if (!user?.email) return;
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
       setLoading(true);
       try {
-        const vq = query(collection(db, 'vendors'), where('email', '==', user.email), limit(1));
-        const vs = await getDocs(vq);
-        const v = vs.docs[0];
-        if (!v) return;
-        const rq = query(collection(db, 'reservas'), where('referredBy.vendorId', '==', v.id), orderBy('createdAt', 'desc'));
-        const rs = await getDocs(rq);
-        const list = rs.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Reservation[];
-        setReservas(list);
+        const list = await fetchVendorReservations(user);
+        if (!cancelled) setReservas(list);
+      } catch (e: any) {
+        if (!cancelled) toast.error(e.message || 'No se pudieron cargar las reservas');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    load();
   }, [user]);
 
   const filtered = useMemo(() => {
     let list = reservas;
     if (statusFilter !== 'all') list = list.filter(r => r.referredBy?.payoutStatus === statusFilter);
+    if (sourceFilter !== 'all') list = list.filter(r => r.source === sourceFilter);
     const t = search.trim().toLowerCase();
     if (t) {
-      list = list.filter(r => r.customerName.toLowerCase().includes(t) || r.experienceTitle.toLowerCase().includes(t));
+      list = list.filter(r => `${r.customerName} ${r.experienceTitle} ${r.reservationCode ?? ''}`.toLowerCase().includes(t));
     }
     return list;
-  }, [reservas, statusFilter, search]);
+  }, [reservas, statusFilter, sourceFilter, search]);
 
   return (
     <VendorProtectedRoute>
@@ -62,6 +62,16 @@ export default function VendorReservasPage() {
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input placeholder="Buscar..." className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
+              <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as any)}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Origen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="manual">Manuales</SelectItem>
+                  <SelectItem value="online">Online</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Estado comisión" />
@@ -110,6 +120,7 @@ export default function VendorReservasPage() {
                         <th className="px-4 py-3 text-left font-medium">Fecha</th>
                         <th className="px-4 py-3 text-left font-medium">Paquete</th>
                         <th className="px-4 py-3 text-left font-medium">Cliente</th>
+                        <th className="px-4 py-3 text-left font-medium">Origen</th>
                         <th className="px-4 py-3 text-left font-medium">Venta</th>
                         <th className="px-4 py-3 text-left font-medium">Comisión</th>
                         <th className="px-4 py-3 text-left font-medium">Estado</th>
@@ -117,14 +128,18 @@ export default function VendorReservasPage() {
                       </tr>
                     </thead>
                     <tbody>
+                      {filtered.length === 0 && (
+                        <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">No hay reservas asociadas.</td></tr>
+                      )}
                       {filtered.map(r => (
                         <tr key={r.id} className="border-t border-gray-100">
-                          <td className="px-4 py-3">{new Date((r.createdAt as any)?.seconds ? (r.createdAt as any).seconds * 1000 : Date.now()).toLocaleDateString()}</td>
+                          <td className="px-4 py-3">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-'}</td>
                           <td className="px-4 py-3">{r.experienceTitle}</td>
                           <td className="px-4 py-3">{r.customerName}</td>
+                          <td className="px-4 py-3"><Badge variant="outline">{r.source === 'manual' ? 'Manual' : 'Online'}</Badge></td>
                           <td className="px-4 py-3">{(r.amountTotal/100).toLocaleString()} {r.currency?.toUpperCase?.()}</td>
-                          <td className="px-4 py-3">{r.referredBy ? (r.referredBy.commissionAmount/100).toLocaleString() : '-'}</td>
-                          <td className="px-4 py-3">{r.referredBy ? <Badge variant="outline" className="capitalize">{r.referredBy.payoutStatus}</Badge> : '-'}</td>
+                          <td className="px-4 py-3">{(r.referredBy.commissionAmount/100).toLocaleString()} {r.referredBy.commissionCurrency?.toUpperCase?.() ?? ''}</td>
+                          <td className="px-4 py-3"><Badge variant="outline" className="capitalize">{r.referredBy.payoutStatus}</Badge></td>
                           <td className="px-4 py-3">
                             <a href={`/vendedor/reservas/${r.id}`} className="text-primary text-sm hover:underline">Editar</a>
                           </td>

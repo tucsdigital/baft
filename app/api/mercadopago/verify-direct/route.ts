@@ -24,6 +24,7 @@ import { getPayment, isPaymentApproved, mapPaymentStatusToReservationStatus, sea
 import { normalizeDigits, normalizeEmail, reserveNextReservationCode } from '@/lib/reservas/code';
 import { buildQueuedEmailDelivery } from '@/lib/sales/status';
 import { buildReservationPricingSnapshot } from '@/lib/sales/orchestrator';
+import { buildReferredByFromCode } from '@/lib/referrals';
 import { resolveDepartureConfig } from '@/lib/packages/resolve-departure';
 
 export const runtime = 'nodejs';
@@ -409,6 +410,14 @@ export async function POST(request: Request) {
   const voucherSendId: string | null = null;
   const adminSendId: string | null = null;
 
+  const referredBy = await buildReferredByFromCode({
+    code: intentData.referral?.code,
+    pkg,
+    amountTotal,
+    people,
+    status: reservationStatus === 'completed' ? 'completed' : 'pending',
+  });
+
   const reservationId = `mp_${directPaymentId}`;
   const reservaRef = doc(db, 'reservas', reservationId);
   const stockRef = doc(db, 'stockMovimientos', `mp_${reservationId}`);
@@ -502,6 +511,7 @@ export async function POST(request: Request) {
           enabled: pkg ? resolveDepartureConfig(pkg, date).enabled : false,
         },
         packageSnapshot: { id: packageId, slug: packageSlug, title: finalPackageTitle },
+        ...(referredBy ? { referredBy } : {}),
         experienceSnapshot: { id: packageId, slug: packageSlug, title: finalPackageTitle },
         statusHistory: [
           {

@@ -59,6 +59,71 @@ async function getAuthUserByEmail(auth: Auth, email: string) {
   }
 }
 
+/**
+ * Lectura para los selectores del admin (sin índices ni reglas de Firestore):
+ * - GET /api/admin/vendors                -> { vendors } (activos + el indicado en ?include=<id>)
+ * - GET /api/admin/vendors?vendorId=<id>  -> { links } del vendedor
+ */
+export async function GET(request: Request) {
+  const guard = await guardAdmin(request);
+  if (guard instanceof NextResponse) return guard;
+  const { db } = guard;
+  const url = new URL(request.url);
+  const vendorId = url.searchParams.get('vendorId')?.trim();
+
+  try {
+    if (vendorId) {
+      const snap = await db.collection(REFERRAL_LINKS_COLLECTION).where('vendorId', '==', vendorId).get();
+      const pkgIds = Array.from(new Set(snap.docs.map((d) => String((d.data() as any).experienceId ?? '')).filter(Boolean)));
+      const titles = new Map<string, string>();
+      await Promise.all(
+        pkgIds.map(async (id) => {
+          const p = await db.collection('paquetes').doc(id).get();
+          if (p.exists) titles.set(id, String((p.data() as any).titulo ?? (p.data() as any).title ?? ''));
+        })
+      );
+      const links = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          const experienceId = data.experienceId ? String(data.experienceId) : null;
+          return {
+            id: d.id,
+            code: String(data.code ?? ''),
+            active: Boolean(data.active),
+            vendorId,
+            experienceId,
+            packageId: data.packageId ? String(data.packageId) : experienceId,
+            experienceName: experienceId ? titles.get(experienceId) ?? '' : 'Todas',
+          };
+        })
+        .filter((l) => l.active && l.code)
+        .sort((a, b) => a.code.localeCompare(b.code));
+      return NextResponse.json({ ok: true, links });
+    }
+
+    const include = url.searchParams.get('include')?.trim();
+    const snap = await db.collection(VENDORS_COLLECTION).get();
+    const vendors = snap.docs
+      .map((d) => {
+        const v = d.data() as any;
+        const allowed = v.allowedPackages ?? v.allowedExperiences;
+        return {
+          id: d.id,
+          name: String(v.name ?? ''),
+          email: String(v.email ?? ''),
+          dni: String(v.normalizedDni ?? v.dni ?? ''),
+          active: Boolean(v.active),
+          allowedPackages: Array.isArray(allowed) ? allowed.map(String) : null,
+        };
+      })
+      .filter((v) => v.active || v.id === include)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return NextResponse.json({ ok: true, vendors });
+  } catch (error) {
+    return fail(errorMessage(error), 500);
+  }
+}
+
 /** Alta: usuario de Auth (contraseña = DNI) + documento del vendedor, todo o nada. */
 export async function POST(request: Request) {
   const guard = await guardAdmin(request);

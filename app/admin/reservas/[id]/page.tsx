@@ -47,8 +47,8 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Vendor, ReferralLink } from '@/types/vendor';
-import { getVendors, getReferralLinksByVendor } from '@/lib/vendors';
+import { fetchAdminVendorLinks, type AdminVendorLink } from '@/lib/admin-vendors-client';
+import VendorCombobox from '@/components/admin/VendorCombobox';
 import { getAllPaquetesAdmin } from '@/lib/paquetes';
 import { getPackageAddonOptions } from '@/lib/packages/resolve-departure';
 import { getCountryByName } from '@/lib/countries';
@@ -198,9 +198,8 @@ export default function ReservaDetailPage() {
   const [stock, setStock] = useState<StockSummary | null>(null);
   const [stockLoading, setStockLoading] = useState(false);
   const [otherPurchases, setOtherPurchases] = useState<Reservation[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [vendorId, setVendorId] = useState('');
-  const [links, setLinks] = useState<ReferralLink[]>([]);
+    const [vendorId, setVendorId] = useState('');
+  const [links, setLinks] = useState<AdminVendorLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
   const [pickedCode, setPickedCode] = useState('');
   const [manualCode, setManualCode] = useState('');
@@ -275,12 +274,6 @@ export default function ReservaDetailPage() {
   }, [reserva?.experienceId, reserva?.packageId]);
 
   useEffect(() => {
-    let off = false;
-    getVendors({ activeOnly: true, limit: 200 }).then((l) => { if (!off) setVendors(l); }).catch(() => {});
-    return () => { off = true; };
-  }, []);
-
-  useEffect(() => {
     if (!reserva?.referredBy) { setVendorId(''); setPickedCode(''); setManualCode(''); setLinks([]); return; }
     setVendorId(reserva.referredBy.vendorId ?? '');
     setPickedCode(reserva.referredBy.code ?? '');
@@ -291,7 +284,7 @@ export default function ReservaDetailPage() {
     let off = false;
     if (!vendorId) { setLinks([]); setLinksLoading(false); return; }
     setLinksLoading(true);
-    getReferralLinksByVendor(vendorId).then((l) => { if (!off) setLinks(l); }).catch(() => { if (!off) setLinks([]); }).finally(() => { if (!off) setLinksLoading(false); });
+    fetchAdminVendorLinks(vendorId).then((l) => { if (!off) setLinks(l); }).catch((e) => { if (!off) { setLinks([]); toast.error(e?.message || 'No pudimos cargar los códigos del vendedor'); } }).finally(() => { if (!off) setLinksLoading(false); });
     return () => { off = true; };
   }, [vendorId]);
 
@@ -466,7 +459,7 @@ export default function ReservaDetailPage() {
       if (!res.ok) { const e = await res.json().catch(() => null); throw new Error(e?.error ?? ''); }
       toast.success(clear ? 'Vendedor desvinculado' : 'Vendedor actualizado');
       await load(false);
-    } catch { toast.error('No pudimos actualizar el vendedor'); } finally { setSavingReferral(false); }
+    } catch (e) { toast.error(e instanceof Error && e.message ? e.message : 'No pudimos actualizar el vendedor'); } finally { setSavingReferral(false); }
   };
 
   const handleMovement = async () => {
@@ -995,13 +988,7 @@ export default function ReservaDetailPage() {
                   </p>
                 )}
                 <div className="mt-3 space-y-2">
-                  <Select value={vendorId || 'none'} onValueChange={(v) => { setVendorId(v === 'none' ? '' : v); setPickedCode(''); setManualCode(''); }} disabled={savingReferral}>
-                    <SelectTrigger><SelectValue placeholder="Elegí vendedor" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin vendedor</SelectItem>
-                      {vendors.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <VendorCombobox value={vendorId} includeId={reserva.referredBy?.vendorId} disabled={savingReferral} onChange={(id) => { setVendorId(id); setPickedCode(''); setManualCode(''); }} />
                   <Select value={pickedCode || 'none'} onValueChange={(v) => { setPickedCode(v === 'none' ? '' : v); setManualCode(''); }} disabled={!vendorId || !linksForPackage.length || linksLoading || savingReferral}>
                     <SelectTrigger><SelectValue placeholder={linksLoading ? 'Cargando…' : 'Código'} /></SelectTrigger>
                     <SelectContent>

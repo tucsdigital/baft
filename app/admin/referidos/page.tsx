@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, getAuthInstance } from '@/lib/firebase';
 import type { Vendor } from '@/types/vendor';
 import type { Reservation } from '@/components/landing-reserva/types';
 import {
@@ -103,6 +103,38 @@ export default function ReferidosPage() {
   };
 
   const [selected, setSelected] = useState<string[]>([]);
+  const [repairing, setRepairing] = useState(false);
+  const repairSales = async () => {
+    const user = getAuthInstance().currentUser;
+    if (!user) return;
+    setRepairing(true);
+    try {
+      const token = await user.getIdToken();
+      const call = async (apply: boolean) => {
+        const res = await fetch('/api/admin/referidos/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ apply }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || 'Error de servidor');
+        return data as { fixed: number };
+      };
+      const preview = await call(false);
+      if (preview.fixed === 0) {
+        toast.info('No hay ventas online sin vendedor para reparar.');
+        return;
+      }
+      if (!window.confirm(`Se asignará el vendedor a ${preview.fixed} venta(s) online que lo perdieron. ¿Continuar?`)) return;
+      await call(true);
+      toast.success(`${preview.fixed} venta(s) reparadas`);
+      window.location.reload();
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo reparar');
+    } finally {
+      setRepairing(false);
+    }
+  };
   const toggleSel = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -118,7 +150,8 @@ export default function ReferidosPage() {
               <p className="mt-1 text-sm text-gray-600">Reservas con vendedor asignado y comisiones</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" disabled={!selected.length} onClick={() => markPaid(selected)}>Marcar pagadas</Button>
+              <Button variant="outline" disabled={repairing} onClick={repairSales}>{repairing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reparar ventas sin vendedor"}</Button>
+        <Button variant="secondary" disabled={!selected.length} onClick={() => markPaid(selected)}>Marcar pagadas</Button>
               {selected.length > 0 && <Button variant="ghost" onClick={clearSel}>Limpiar selección</Button>}
             </div>
           </div>
