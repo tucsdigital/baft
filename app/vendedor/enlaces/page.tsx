@@ -1,10 +1,9 @@
-'use client';
+﻿'use client';
 
 import VendorProtectedRoute from '@/components/vendor/VendorProtectedRoute';
 import VendorLayout from '@/components/vendor/VendorLayout';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getReferralLinksByVendor, createReferralLink, deactivateReferralLink, deleteReferralLink } from '@/lib/vendors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
-const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const siteUrl = () => (typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || '');
 const CURRENCIES: Array<'ars' | 'brl' | 'usd'> = ['ars', 'brl', 'usd'];
 
@@ -30,53 +28,51 @@ export default function VendorEnlacesPage() {
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos');
   const [packageFilter, setPackageFilter] = useState<string>('all');
   const [packages, setPackages] = useState<{ id: string; title: string; slug: string }[]>([]);
-  const [allowedPackages, setAllowedPackages] = useState<string[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedPackageId, setSelectedPackageId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const api = async (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: unknown) => {
+    if (!user) throw new Error('Sesión no encontrada');
+    const token = await user.getIdToken();
+    const res = await fetch('/api/vendor/links', {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error || 'Error de servidor');
+    return data as { vendorId: string; links: ReferralLink[]; packages: { id: string; title: string; slug: string }[] };
+  };
+
+  const applySnapshot = (data: { vendorId: string; links: ReferralLink[]; packages: { id: string; title: string; slug: string }[] }) => {
+    setVendorId(data.vendorId);
+    setLinks(data.links);
+    setPackages(data.packages);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      if (!user?.email) return;
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
       setLoading(true);
       try {
-        const vq = query(collection(db, 'vendors'), where('email', '==', user.email), limit(1));
-        const vs = await getDocs(vq);
-        const v = vs.docs[0];
-        if (!v) return;
-        setVendorId(v.id);
-        const vdata = v.data() as any;
-        const allowed = Array.isArray(vdata?.allowedPackages)
-          ? (vdata.allowedPackages as string[])
-          : (Array.isArray(vdata?.allowedExperiences) ? (vdata.allowedExperiences as string[]) : null);
-        setAllowedPackages(allowed);
-        const list = await getReferralLinksByVendor(v.id);
-        setLinks(list);
-        // Cargar paquetes
-        const pkgSnap = await getDocs(collection(db, 'paquetes'));
-        const all = pkgSnap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .map((e: any) => ({
-            id: e.id,
-            title: String(e.titulo ?? e.title ?? ''),
-            slug: String(e.slug ?? ''),
-          }))
-          .filter((e) => e.title && e.slug);
-        const filtered = Array.isArray(allowed) && allowed.length > 0
-          ? all.filter((e) => allowed.includes(e.id))
-          : all;
-        const finalPackages = filtered.length === 0 && Array.isArray(allowed) && allowed.length > 0 ? all : filtered;
-        finalPackages.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-        setPackages(finalPackages);
+        const data = await api('GET');
+        if (!cancelled) applySnapshot(data);
+      } catch (e: any) {
+        if (!cancelled) toast.error(e.message || 'No se pudieron cargar los enlaces');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
   const packagesFromLinks = useMemo(() => {
     const set = new Map<string, string>();
     for (const l of links) {
@@ -190,7 +186,6 @@ export default function VendorEnlacesPage() {
   };
 
   const createLinkConfirmed = async () => {
-    if (!vendorId) return;
     const expId = selectedPackageId.trim();
     if (!expId) {
       toast.error('Seleccioná una excursión');
@@ -200,57 +195,17 @@ export default function VendorEnlacesPage() {
       toast.error('Ya tenés un enlace para esa excursión');
       return;
     }
-    if (Array.isArray(allowedPackages) && allowedPackages.length > 0 && !allowedPackages.includes(expId)) {
-      toast.error('No estás autorizado para esa excursión');
-      return;
-    }
     setCreating(true);
     try {
-      let attempts = 0;
-      while (attempts < 5) {
-        try {
-          const code = genCode();
-          await createReferralLink({
-            vendorId,
-            code,
-            active: true,
-            utm: null,
-            experienceId: expId,
-          });
-          const list = await getReferralLinksByVendor(vendorId);
-          setLinks(list);
-          toast.success('Enlace creado');
-          setCreateOpen(false);
-          return;
-        } catch (e: any) {
-          const msg = e?.message ?? '';
-          if (msg === 'CODE_TAKEN') {
-            attempts++;
-            continue;
-          }
-          if (msg === 'DUPLICATE_EXPERIENCE') {
-            toast.error('Ya existe un enlace para esa excursión');
-            return;
-          }
-          if (msg === 'NOT_ALLOWED_EXPERIENCE') {
-            toast.error('No tenés permiso para esa excursión');
-            return;
-          }
-          if (msg === 'MISSING_EXPERIENCE') {
-            toast.error('Falta la excursión');
-            return;
-          }
-          throw e;
-        }
-      }
-      toast.error('No se pudo generar un código único. Probá nuevamente.');
-    } catch {
-      toast.error('No se pudo crear el enlace');
+      applySnapshot(await api('POST', { packageId: expId }));
+      toast.success('Enlace creado');
+      setCreateOpen(false);
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo crear el enlace');
     } finally {
       setCreating(false);
     }
   };
-
   const copyLink = async (l: ReferralLink) => {
     try {
       const url = publicUrlForLink(l);
@@ -264,14 +219,11 @@ export default function VendorEnlacesPage() {
   
 
   const deactivate = async (id: string) => {
-    if (!vendorId) return;
     try {
-      await deactivateReferralLink(id);
-      const list = await getReferralLinksByVendor(vendorId);
-      setLinks(list);
+      applySnapshot(await api('PATCH', { linkId: id }));
       toast.success('Enlace desactivado');
-    } catch {
-      toast.error('No se pudo desactivar');
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo desactivar');
     }
   };
 
@@ -284,19 +236,16 @@ export default function VendorEnlacesPage() {
   };
 
   const confirmDelete = async () => {
-    if (!vendorId || !deleteId) return;
+    if (!deleteId) return;
     try {
-      await deleteReferralLink(deleteId);
-      const list = await getReferralLinksByVendor(vendorId);
-      setLinks(list);
+      applySnapshot(await api('DELETE', { linkId: deleteId }));
       toast.success('Enlace eliminado');
-    } catch {
-      toast.error('No se pudo eliminar el enlace');
+    } catch (e: any) {
+      toast.error(e.message || 'No se pudo eliminar el enlace');
     } finally {
       setDeleteId(null);
     }
   };
-
   return (
     <VendorProtectedRoute>
       <VendorLayout>
@@ -579,3 +528,4 @@ export default function VendorEnlacesPage() {
     </VendorProtectedRoute>
   );
 }
+
