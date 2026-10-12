@@ -10,6 +10,7 @@ const PACKAGES = 'paquetes';
 type Ccy = 'ars' | 'brl' | 'usd';
 
 const idSchema = z.object({ linkId: z.string().min(1) });
+const toggleSchema = z.object({ linkId: z.string().min(1), active: z.boolean().default(false) });
 const createSchema = z.object({ packageId: z.string().min(1) });
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
@@ -54,7 +55,7 @@ async function loadLinks(db: FirebaseFirestore.Firestore, vendorId: string, pack
       let salesCount = 0;
       for (const s of sales.docs) {
         const r = s.data() as any;
-        if (r.status !== 'completed') continue;
+        if (r.status === 'cancelled') continue;
         salesCount += 1;
         const ccy = String(r.currency ?? '').toLowerCase() as Ccy;
         if (ccy in revenueByCurrency) revenueByCurrency[ccy] += Number(r.amountTotal) || 0;
@@ -171,12 +172,12 @@ async function ownedLink(ctx: Exclude<Awaited<ReturnType<typeof guardVendor>>, N
 export async function PATCH(request: Request) {
   const ctx = await guardVendor(request);
   if (ctx instanceof NextResponse) return ctx;
-  const parsed = idSchema.safeParse(await request.json().catch(() => null));
+  const parsed = toggleSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return fail('Datos inválidos', 400);
   try {
     const link = await ownedLink(ctx, parsed.data.linkId);
     if (!link) return fail('Enlace no encontrado', 404);
-    await link.ref.update({ active: false, updatedAt: Timestamp.now() });
+    await link.ref.update({ active: parsed.data.active, updatedAt: Timestamp.now() });
     return NextResponse.json({ ok: true, ...(await snapshot(ctx.db, ctx.vendorId, ctx.vendor)) });
   } catch (e) {
     return fail(e instanceof Error ? e.message : 'No se pudo desactivar', 500);

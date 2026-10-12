@@ -55,13 +55,13 @@ export type ReservationAttachment = {
   key?: string;
   name?: string;
   type?: string;
-  uploadedBy: 'admin' | 'user';
+  uploadedBy: 'admin' | 'user' | 'vendor';
   createdAt: object;
 };
 
 export type ReservationHistoryItem = {
   status: ReservationStatus;
-  actor: 'admin' | 'system';
+  actor: 'admin' | 'system' | 'vendor';
   note?: string;
   createdAt: object;
 };

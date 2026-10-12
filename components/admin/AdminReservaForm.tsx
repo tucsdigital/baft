@@ -876,7 +876,7 @@ export default function AdminReservaForm({ paquetes, hideReferral, hideVendorSel
                 </div>
               ) : null}
 
-              <div className="rounded-2xl bg-gray-50 p-4">
+              <div className={hideVendorSelect ? 'hidden' : 'rounded-2xl bg-gray-50 p-4'}>
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <Label className="text-xs text-gray-600">Adicionales de otras excursiones</Label>
