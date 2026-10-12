@@ -93,6 +93,7 @@ export async function finalizeWeTravelPaidCheckout(input: {
     amountTotal,
     people,
     status: 'reserved',
+    hasConfirmedPayment: true,
   });
   const replyTo = process.env.SUPPORT_EMAIL || getFromEmail(false);
   const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');

@@ -125,7 +125,7 @@ export function formatMoney(cents: number, currency: string): string {
 export function formatDate(value: string | null | undefined): string {
   if (!value || value === 'sin-fecha') return value === 'sin-fecha' ? 'A coordinar' : '—';
   const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export const STATUS_LABEL: Record<string, string> = {

@@ -122,10 +122,10 @@ export default function ReferidosPage() {
       };
       const preview = await call(false);
       if (preview.fixed === 0) {
-        toast.info('No hay ventas online sin vendedor para reparar.');
+        toast.info('No hay ventas ni comisiones para corregir.');
         return;
       }
-      if (!window.confirm(`Se asignará el vendedor a ${preview.fixed} venta(s) online que lo perdieron. ¿Continuar?`)) return;
+      if (!window.confirm(`Se corregirán ${preview.fixed} venta(s): asignación de vendedor en ventas online y estado de la comisión. ¿Continuar?`)) return;
       await call(true);
       toast.success(`${preview.fixed} venta(s) reparadas`);
       window.location.reload();
@@ -150,7 +150,7 @@ export default function ReferidosPage() {
               <p className="mt-1 text-sm text-gray-600">Reservas con vendedor asignado y comisiones</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" disabled={repairing} onClick={repairSales}>{repairing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reparar ventas sin vendedor"}</Button>
+              <Button variant="outline" disabled={repairing} onClick={repairSales}>{repairing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reparar ventas y comisiones"}</Button>
         <Button variant="secondary" disabled={!selected.length} onClick={() => markPaid(selected)}>Marcar pagadas</Button>
               {selected.length > 0 && <Button variant="ghost" onClick={clearSel}>Limpiar selección</Button>}
             </div>

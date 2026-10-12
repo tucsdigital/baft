@@ -12,7 +12,13 @@ import { randomUUID } from 'crypto';
 import { arrayUnion, collection, doc, getDoc, runTransaction, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getVendorById, getReferralByCode } from '@/lib/vendors';
-import { computeCommission, nextPayoutStatusForReservationStatus } from '@/lib/referrals';
+import {
+  computeCommission,
+  nextPayoutStatusForReservationStatus,
+  reservationHasConfirmedPayment,
+  resolvePayoutStatus,
+  syncReservationPayoutStatus,
+} from '@/lib/referrals';
 import { buildBaseSeatReservationSeats, getSeatDepartureId, seatIdsFromLabels } from '@/lib/seats/server';
 import {
   normalizeDigits,
@@ -229,6 +235,7 @@ async function resolveReservationReferralAssignment(params: {
   vendorId?: string;
   referralCode?: string;
   existingPayoutStatus?: 'pending' | 'accrued' | 'paid' | 'cancelled' | null;
+  hasConfirmedPayment?: boolean;
 }) {
   const packageId = String(params.packageId || '').trim();
   if (!packageId) {
@@ -244,10 +251,11 @@ async function resolveReservationReferralAssignment(params: {
           currency: paquete.bookingConfig.referralCommission.currency,
         }
       : undefined;
-  const payoutStatus =
-    params.existingPayoutStatus === 'paid'
-      ? params.existingPayoutStatus
-      : nextPayoutStatusForReservationStatus(params.status);
+  const payoutStatus = resolvePayoutStatus({
+    status: params.status,
+    hasConfirmedPayment: Boolean(params.hasConfirmedPayment),
+    current: params.existingPayoutStatus,
+  });
 
   const referralCode = String(params.referralCode ?? '').trim();
   if (referralCode) {
@@ -576,6 +584,7 @@ export async function createReservaCore(request: Request, ctx: ReservaActorConte
       status: payload.status ?? 'reserved',
       vendorId: payload.vendorId,
       referralCode: payload.referralCode,
+      hasConfirmedPayment: (payload.status ?? 'reserved') === 'reserved' || payload.status === 'completed',
     });
 
     // El código se reserva en su propia transacción ANTES: así la transacción
@@ -1066,6 +1075,7 @@ export async function patchReservaCore(request: Request, ctx: ReservaActorContex
         vendorId: payload.vendorId,
         referralCode: payload.referralCode,
         existingPayoutStatus: (reservation as any).referredBy?.payoutStatus,
+        hasConfirmedPayment: await reservationHasConfirmedPayment(payload.reservationId),
       });
 
       if (referredBy) {
@@ -1161,6 +1171,9 @@ export async function patchReservaCore(request: Request, ctx: ReservaActorContex
         updatedAt: nowAddon,
       });
     }
+
+    // La comisión siempre refleja el estado actual de la venta y sus pagos.
+    await syncReservationPayoutStatus(payload.reservationId).catch(() => null);
 
     const emailResults: Array<{ type: string; sent: boolean; error?: string }> = [];
     const queueEmail = async (type: 'cliente_voucher_48hs' | 'admin_aviso') => {

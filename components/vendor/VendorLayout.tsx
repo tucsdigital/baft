@@ -195,13 +195,7 @@ export default function VendorLayout({ children }: { children: React.ReactNode }
                 </ol>
               </nav>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button asChild size="sm" className="gap-1.5">
-                <Link href="/vendedor/reservas/nueva">
-                  <PlusCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">Nueva reserva</span>
-                </Link>
-              </Button>
+            <div className="flex shrink-0 items-center gap-2">-
               <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
                 <Link href="/" target="_blank">
                   Ver sitio

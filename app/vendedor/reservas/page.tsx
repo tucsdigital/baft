@@ -8,11 +8,10 @@ import VendorLayout from '@/components/vendor/VendorLayout';
 import { EmptyState, ErrorState, LoadingBlock, PageHeader, Panel, PayoutPill, SourcePill, StatusPill } from '@/components/vendor/parts';
 import AdminPagination from '@/components/admin/AdminPagination';
 import { Button } from '@/components/ui/button';
+import { DateRangeFilter, FilterSelect } from '@/components/vendor/filters';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { PAYOUT_LABEL, STATUS_LABEL, fetchVendorReservations, formatDate, formatMoney, type VendorReservationRow } from '@/lib/vendor-client';
-
-const selectClass = 'h-9 rounded-md border border-input bg-white px-2.5 text-sm shadow-xs outline-none focus:ring-2 focus:ring-gray-200';
 
 function ReservasList() {
   const { user } = useAuth();
@@ -24,6 +23,7 @@ function ReservasList() {
   const [source, setSource] = useState<'all' | 'manual' | 'online'>('all');
   const [status, setStatus] = useState('all');
   const [payout, setPayout] = useState('all');
+  const [pkg, setPkg] = useState('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
@@ -52,23 +52,54 @@ function ReservasList() {
       if (source !== 'all' && r.source !== source) return false;
       if (status !== 'all' && r.status !== status) return false;
       if (payout !== 'all' && r.referredBy.payoutStatus !== payout) return false;
+      if (pkg !== 'all' && (r.packageId ?? r.experienceTitle) !== pkg) return false;
       const created = r.createdAt ? r.createdAt.slice(0, 10) : '';
       if (from && (!created || created < from)) return false;
       if (to && (!created || created > to)) return false;
       if (!t) return true;
       return `${r.customerName} ${r.customerEmail} ${r.experienceTitle} ${r.reservationCode ?? ''} ${r.referredBy.code ?? ''}`.toLowerCase().includes(t);
     });
-  }, [rows, search, source, status, payout, from, to]);
+  }, [rows, search, source, status, payout, pkg, from, to]);
 
-  useEffect(() => setPage(1), [search, source, status, payout, from, to, perPage]);
+  useEffect(() => setPage(1), [search, source, status, payout, pkg, from, to, perPage]);
+
+  // Opciones de filtro construidas con los datos reales de las reservas.
+  const options = useMemo(() => {
+    const count = (get: (r: VendorReservationRow) => string | null | undefined, label: (k: string) => string) => {
+      const m = new Map<string, { label: string; count: number }>();
+      for (const r of rows) {
+        const k = get(r);
+        if (!k) continue;
+        const cur = m.get(k) ?? { label: label(k), count: 0 };
+        cur.count += 1;
+        m.set(k, cur);
+      }
+      return Array.from(m, ([value, v]) => ({ value, label: v.label, count: v.count })).sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    };
+    return {
+      source: count((r) => r.source, (k) => (k === 'manual' ? 'Manual' : 'Online')),
+      status: count((r) => r.status, (k) => STATUS_LABEL[k] ?? k),
+      payout: count((r) => r.referredBy.payoutStatus, (k) => PAYOUT_LABEL[k] ?? k),
+      pkg: count((r) => r.packageId ?? r.experienceTitle, (k) => rows.find((r) => (r.packageId ?? r.experienceTitle) === k)?.experienceTitle || k),
+    };
+  }, [rows]);
+
+  const dateLimits = useMemo(() => {
+    const days = rows.map((r) => r.createdAt?.slice(0, 10)).filter(Boolean) as string[];
+    if (days.length === 0) return { min: undefined, max: undefined };
+    const today = new Date().toISOString().slice(0, 10);
+    const last = days.reduce((a, b) => (a > b ? a : b));
+    return { min: days.reduce((a, b) => (a < b ? a : b)), max: last > today ? last : today };
+  }, [rows]);
 
   const pageRows = useMemo(() => filtered.slice((page - 1) * perPage, page * perPage), [filtered, page, perPage]);
-  const hasFilters = Boolean(search || source !== 'all' || status !== 'all' || payout !== 'all' || from || to);
+  const hasFilters = Boolean(search || source !== 'all' || status !== 'all' || payout !== 'all' || pkg !== 'all' || from || to);
   const clear = () => {
     setSearch('');
     setSource('all');
     setStatus('all');
     setPayout('all');
+    setPkg('all');
     setFrom('');
     setTo('');
   };
@@ -127,44 +158,29 @@ function ReservasList() {
       />
 
       <Panel>
-        <div className="flex flex-col gap-3 border-b border-gray-100 p-4 lg:flex-row lg:flex-wrap lg:items-center">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input placeholder="Buscar cliente, excursión, código…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="space-y-3 border-b border-gray-100 bg-gray-50/60 p-4">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input placeholder="Buscar cliente, excursión, código…" className="rounded-full border-0 bg-white pl-9 shadow-xs ring-1 ring-gray-200/60 focus-visible:ring-2 focus-visible:ring-gray-300" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <select className={selectClass} value={source} onChange={(e) => setSource(e.target.value as any)} aria-label="Origen">
-            <option value="all">Todos los orígenes</option>
-            <option value="manual">Manuales</option>
-            <option value="online">Online</option>
-          </select>
-          <select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Estado">
-            <option value="all">Todos los estados</option>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-          <select className={selectClass} value={payout} onChange={(e) => setPayout(e.target.value)} aria-label="Comisión">
-            <option value="all">Toda comisión</option>
-            {Object.entries(PAYOUT_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                Comisión {v.toLowerCase()}
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-2">
-            <input type="date" className={selectClass} value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="Desde" />
-            <span className="text-xs text-gray-400">a</span>
-            <input type="date" className={selectClass} value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Hasta" />
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterSelect label="Origen" value={source} onChange={(v) => setSource(v as any)} options={options.source} />
+            <FilterSelect label="Estado" value={status} onChange={setStatus} options={options.status} />
+            <FilterSelect label="Comisión" value={payout} onChange={setPayout} options={options.payout} />
+            {options.pkg.length > 1 && <FilterSelect label="Excursión" value={pkg} onChange={setPkg} options={options.pkg} className="max-w-[260px]" />}
+            <DateRangeFilter label="Creada" from={from} to={to} minDate={dateLimits.min} maxDate={dateLimits.max} onChange={(r) => { setFrom(r.from); setTo(r.to); }} />
+            {hasFilters && (
+              <button type="button" onClick={clear} className="inline-flex h-9 items-center gap-1 rounded-full px-3 text-sm text-gray-500 transition-colors hover:bg-gray-200/50 hover:text-gray-800">
+                <X className="h-3.5 w-3.5" /> Limpiar
+              </button>
+            )}
+            {!loading && !error && (
+              <span className="ml-auto text-xs text-gray-500">
+                {filtered.length === rows.length ? `${rows.length} reservas` : `${filtered.length} de ${rows.length} reservas`}
+              </span>
+            )}
           </div>
-          {hasFilters && (
-            <Button variant="ghost" size="sm" className="gap-1" onClick={clear}>
-              <X className="h-4 w-4" /> Limpiar
-            </Button>
-          )}
         </div>
-
         {error ? (
           <div className="p-4">
             <ErrorState message={error} onRetry={load} />

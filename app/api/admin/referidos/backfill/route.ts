@@ -2,16 +2,22 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Timestamp } from 'firebase-admin/firestore';
 import { guardAdmin } from '@/lib/vendor-admin';
-import { buildReferredByFromCode } from '@/lib/referrals';
+import { buildReferredByFromCode, isConfirmedPayment, resolvePayoutStatus } from '@/lib/referrals';
 import { getPaqueteById } from '@/lib/paquetes';
 
 export const runtime = 'nodejs';
 
 const schema = z.object({ apply: z.boolean().optional() });
 
+async function hasConfirmedPayment(db: FirebaseFirestore.Firestore, reservationId: string): Promise<boolean> {
+  const snap = await db.collection('reservas').doc(reservationId).collection('payments').get();
+  return snap.docs.some((d) => isConfirmedPayment(d.data() as any));
+}
+
 /**
  * Reconstruye `referredBy` en ventas online que lo perdieron (verify-direct / WeTravel),
  * a partir del código guardado en su checkoutIntent. Solo toca reservas SIN `referredBy`.
+ * También reclasifica la comisión (Pendiente <-> Devengada) según el estado y los pagos de la venta.
  * POST { apply: false } (por defecto) simula; { apply: true } escribe.
  */
 export async function POST(request: Request) {
@@ -60,6 +66,7 @@ export async function POST(request: Request) {
         amountTotal: Number(reserva.amountTotal) || 0,
         people: Number(reserva.people) || 1,
         status: reserva.status,
+        hasConfirmedPayment: await hasConfirmedPayment(db, found.id),
       });
       if (!referredBy) continue;
 
@@ -67,7 +74,32 @@ export async function POST(request: Request) {
       report.push({ reservationId: found.id, code, vendor: referredBy.vendorName, applied: apply });
     }
 
-    return NextResponse.json({ ok: true, apply, fixed: report.length, alreadyAssigned: skipped, reservations: report });
+    // Reclasificación de comisiones existentes.
+    const reclassified: Array<{ reservationId: string; from: string; to: string }> = [];
+    const open = await db.collection('reservas').where('referredBy.payoutStatus', 'in', ['pending', 'accrued']).get();
+    for (const d of open.docs) {
+      const r = d.data() as any;
+      const from = String(r.referredBy?.payoutStatus ?? '');
+      const to = resolvePayoutStatus({
+        status: r.status,
+        hasConfirmedPayment: await hasConfirmedPayment(db, d.id),
+        current: from as any,
+      });
+      if (to === from) continue;
+      if (apply) await d.ref.update({ 'referredBy.payoutStatus': to, updatedAt: Timestamp.now() });
+      reclassified.push({ reservationId: d.id, from, to });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      apply,
+      fixed: report.length + reclassified.length,
+      assigned: report.length,
+      reclassified: reclassified.length,
+      alreadyAssigned: skipped,
+      reservations: report,
+      payoutChanges: reclassified,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });
   }

@@ -1,5 +1,7 @@
 import type { Vendor } from '@/types/vendor';
 import type { Reservation } from '@/components/landing-reserva/types';
+import { collection, doc, getDoc, getDocs, Timestamp, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { getReferralByCode, getVendorById } from '@/lib/vendors';
 
 export function computeCommission(params: {
@@ -25,10 +27,64 @@ export async function resolveReferralFromCode(code: string): Promise<{ vendor: V
   return { vendor, code: ref.code };
 }
 
-export function nextPayoutStatusForReservationStatus(status: Reservation['status']): 'pending' | 'accrued' | 'paid' | 'cancelled' {
+export type PayoutStatus = 'pending' | 'accrued' | 'paid' | 'cancelled';
+
+export function nextPayoutStatusForReservationStatus(status: Reservation['status']): PayoutStatus {
   if (status === 'completed') return 'accrued';
   if (status === 'cancelled') return 'cancelled';
   return 'pending';
+}
+
+/** Un pago cuenta como confirmado si fue aprobado/registrado como pagado (no reembolsos ni ajustes). */
+export function isConfirmedPayment(payment: { status?: unknown; movementType?: unknown }): boolean {
+  const status = String(payment?.status ?? '').toLowerCase();
+  const type = String(payment?.movementType ?? 'payment').toLowerCase();
+  return (status === 'paid' || status === 'approved') && type === 'payment';
+}
+
+/**
+ * Regla única del estado de la comisión:
+ * - Anulada si la venta se canceló; Pagada se respeta siempre.
+ * - Devengada si la venta está completada, o reservada con un pago confirmado.
+ * - Pendiente en cualquier otro caso.
+ */
+export function resolvePayoutStatus(params: {
+  status: Reservation['status'];
+  hasConfirmedPayment: boolean;
+  current?: PayoutStatus | null;
+}): PayoutStatus {
+  if (params.status === 'cancelled') return 'cancelled';
+  if (params.current === 'paid') return 'paid';
+  if (params.status === 'completed') return 'accrued';
+  if (params.status === 'reserved' && params.hasConfirmedPayment) return 'accrued';
+  return 'pending';
+}
+
+export async function reservationHasConfirmedPayment(reservationId: string): Promise<boolean> {
+  try {
+    const snap = await getDocs(collection(db, 'reservas', reservationId, 'payments'));
+    return snap.docs.some((d) => isConfirmedPayment(d.data() as any));
+  } catch {
+    return false;
+  }
+}
+
+/** Recalcula `referredBy.payoutStatus` de una reserva a partir de su estado y sus pagos. */
+export async function syncReservationPayoutStatus(reservationId: string): Promise<PayoutStatus | null> {
+  const ref = doc(db, 'reservas', reservationId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const data = snap.data() as any;
+  if (!data.referredBy) return null;
+  const next = resolvePayoutStatus({
+    status: data.status,
+    hasConfirmedPayment: await reservationHasConfirmedPayment(reservationId),
+    current: data.referredBy.payoutStatus,
+  });
+  if (next !== data.referredBy.payoutStatus) {
+    await updateDoc(ref, { 'referredBy.payoutStatus': next, updatedAt: Timestamp.now() });
+  }
+  return next;
 }
 
 /**
@@ -42,6 +98,7 @@ export async function buildReferredByFromCode(params: {
   amountTotal: number;
   people: number;
   status: Reservation['status'];
+  hasConfirmedPayment?: boolean;
 }) {
   const code = String(params.code ?? '').trim();
   if (!code) return undefined;
@@ -64,7 +121,7 @@ export async function buildReferredByFromCode(params: {
       commissionValue: comm.value,
       commissionCurrency: comm.currency,
       commissionAmount: comm.commissionAmount,
-      payoutStatus: nextPayoutStatusForReservationStatus(params.status),
+      payoutStatus: resolvePayoutStatus({ status: params.status, hasConfirmedPayment: Boolean(params.hasConfirmedPayment) }),
     };
   } catch (error) {
     console.error('[referrals] No se pudo resolver el referido', error);
