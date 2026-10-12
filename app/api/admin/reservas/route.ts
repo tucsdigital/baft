@@ -24,6 +24,7 @@ import type { SeatLayoutTemplate, SeatStatus } from '@/types';
 import { buildDefaultEmailDelivery } from '@/lib/sales/status';
 import { buildEmailDeliveryState, buildEmailJobDocument, emailDeliveryPathForJobType } from '@/lib/sales/email-jobs';
 import { getFromEmail } from '@/lib/resend';
+import { sendEmailJobNow } from '@/lib/sales/send-email-job';
 import {
   buildAdminNuevaReservaHtml,
   buildAdminNuevaReservaText,
@@ -150,6 +151,7 @@ const adminUpdateSchema = z.object({
   referralCode: z.string().max(60).optional(),
   clearReferredBy: z.boolean().optional(),
   enqueueCustomerVoucherEmail: z.boolean().optional(),
+  sendEmailNow: z.boolean().optional(),
   enqueueAdminNotificationEmail: z.boolean().optional(),
   addPaymentEvent: paymentMovementSchema.optional(),
   /** Sumar un adicional existente a una venta ya creada (edición). */
@@ -1156,21 +1158,29 @@ export async function PATCH(request: Request) {
       });
     }
 
-    if (payload.enqueueCustomerVoucherEmail) {
-      await enqueueReservationEmailJob({
-        reservationId: payload.reservationId,
-        type: 'cliente_voucher_48hs',
-      });
+    const emailResults: Array<{ type: string; sent: boolean; error?: string }> = [];
+    const queueEmail = async (type: 'cliente_voucher_48hs' | 'admin_aviso') => {
+      const jobId = await enqueueReservationEmailJob({ reservationId: payload.reservationId, type });
+      if (!payload.sendEmailNow) {
+        emailResults.push({ type, sent: false });
+        return;
+      }
+      const result = await sendEmailJobNow(jobId);
+      emailResults.push(result.ok ? { type, sent: true } : { type, sent: false, error: result.error });
+    };
+
+    if (payload.enqueueCustomerVoucherEmail) await queueEmail('cliente_voucher_48hs');
+    if (payload.enqueueAdminNotificationEmail) await queueEmail('admin_aviso');
+
+    const emailError = emailResults.find((r) => r.error);
+    if (emailError) {
+      return NextResponse.json(
+        { error: `No se pudo enviar el email: ${emailError.error}`, emails: emailResults },
+        { status: 502 }
+      );
     }
 
-    if (payload.enqueueAdminNotificationEmail) {
-      await enqueueReservationEmailJob({
-        reservationId: payload.reservationId,
-        type: 'admin_aviso',
-      });
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, emails: emailResults });
   } catch (error) {
     console.error('[admin/reservas] Error actualizando reserva:', error);
     return NextResponse.json({ error: 'No se pudo actualizar la reserva' }, { status: 500 });

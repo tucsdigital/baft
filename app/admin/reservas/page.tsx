@@ -483,6 +483,7 @@ export default function ReservasPage() {
     attachments?: ReservationAttachmentInput[];
     enqueueCustomerVoucherEmail?: boolean;
     enqueueAdminNotificationEmail?: boolean;
+    sendEmailNow?: boolean;
   }) => {
     if (!user) {
       toast.error('Debés iniciar sesión para ejecutar esta acción');
@@ -528,12 +529,12 @@ export default function ReservasPage() {
         })
       );
 
-      toast.success('Venta actualizada');
+      toast.success(payload.sendEmailNow ? 'Email enviado' : 'Venta actualizada');
       fetchData({ keepLoading: true }).catch(() => null);
       return true;
     } catch (error) {
       console.error('[Ventas] Error actualizando venta:', error);
-      toast.error('No pudimos actualizar la venta');
+      toast.error(payload.sendEmailNow && error instanceof Error ? error.message : 'No pudimos actualizar la venta');
       return false;
     } finally {
       setActionLoadingId(null);
@@ -1078,11 +1079,12 @@ export default function ReservasPage() {
                                     updateReservation({
                                       reservationId: r.id,
                                       enqueueCustomerVoucherEmail: true,
+                                      sendEmailNow: true,
                                     })
                                   }
                                 >
                                   <MailCheck className="h-4 w-4" />
-                                  Reenviar voucher
+                                  Enviar voucher ahora
                                 </DropdownMenuItem>
 
                                 <DropdownMenuItem
@@ -1090,11 +1092,12 @@ export default function ReservasPage() {
                                     updateReservation({
                                       reservationId: r.id,
                                       enqueueAdminNotificationEmail: true,
+                                      sendEmailNow: true,
                                     })
                                   }
                                 >
                                   <Mail className="h-4 w-4" />
-                                  Reenviar aviso interno
+                                  Enviar aviso interno ahora
                                 </DropdownMenuItem>
 
                                 <DropdownMenuItem onClick={() => openReprogram(r)}>

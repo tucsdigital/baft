@@ -499,12 +499,15 @@ export default function ReservaDetailPage() {
       const res = await fetch('/api/admin/reservas', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reservationId: reserva.id, ...(type === 'customer' ? { enqueueCustomerVoucherEmail: true } : { enqueueAdminNotificationEmail: true }) }),
+        body: JSON.stringify({ reservationId: reserva.id, sendEmailNow: true, ...(type === 'customer' ? { enqueueCustomerVoucherEmail: true } : { enqueueAdminNotificationEmail: true }) }),
       });
-      if (!res.ok) throw new Error();
-      toast.success('Email reencolado');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || 'No pudimos enviar el email');
+      }
+      toast.success(type === 'customer' ? 'Voucher enviado al cliente' : 'Aviso interno enviado');
       await load(false);
-    } catch { toast.error('No pudimos encolar el email'); } finally { setBusy(false); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'No pudimos enviar el email'); await load(false); } finally { setBusy(false); }
   };
 
   const uploadFiles = async (files: FileList | null) => {
